@@ -1,0 +1,39 @@
+node_modules/
+dist/
+build/
+
+# Umgebungsvariablen (NIEMALS auf GitHub!)
+.env
+.env.local
+.env.production
+.env.development
+backend/.env
+frontend/.env
+
+# Datenbanken (enthalten Benutzerdaten!)
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.db
+backend/database.sqlite
+backend/database.sqlite-*
+
+# System-Dateien
+.DS_Store
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# IDE-Konfigurationen
+.vscode/
+.idea/
+
+# Test-Coverage
+coverage/
+.nyc_output/
+
+# Backups
+*.backup
+backup-*
