@@ -9,6 +9,22 @@ const requireDozent = (req: any, res: any, next: any) => {
   next();
 };
 
+/**
+ * Berechnet skalierte XP basierend auf Mindestlevel der Quest
+ * Formel: baseXP * (1 + (minLevel - 1) * 0.25)
+ * 
+ * Beispiele:
+ * - Level 1: 100 XP * 1.0 = 100 XP
+ * - Level 3: 100 XP * 1.5 = 150 XP
+ * - Level 5: 100 XP * 2.0 = 200 XP
+ * - Level 10: 100 XP * 3.25 = 325 XP
+ * - Level 20: 100 XP * 5.75 = 575 XP
+ */
+function calculateScaledXP(baseXP: number, minLevel: number): number {
+  const scalingFactor = 1 + (minLevel - 1) * 0.25;
+  return Math.floor(baseXP * scalingFactor);
+}
+
 // Quest erstellen (Dozent)
 dozentRouter.post('/quests', requireDozent, async (req, res) => {
   try {
@@ -36,11 +52,15 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       return res.status(400).json({ error: 'Title, Description und created_by_user_id sind erforderlich' });
     }
     
-    // Preset-Belohnungen basierend auf Schwierigkeit
-    let presetXP = xp_reward || 50;
-    if (difficulty === 'easy') presetXP = xp_reward || 50;
-    else if (difficulty === 'medium') presetXP = xp_reward || 100;
-    else if (difficulty === 'hard') presetXP = xp_reward || 200;
+    // Basis-XP basierend auf Schwierigkeit
+    let baseXP = 50;
+    if (difficulty === 'easy') baseXP = 50;
+    else if (difficulty === 'medium') baseXP = 100;
+    else if (difficulty === 'hard') baseXP = 200;
+    
+    // Skaliere XP basierend auf Mindestlevel (falls nicht manuell gesetzt)
+    const questMinLevel = min_level || 1;
+    const presetXP = xp_reward || calculateScaledXP(baseXP, questMinLevel);
     
     const stmt = db.prepare(`
       INSERT INTO quests (
@@ -216,7 +236,8 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
     
     if (!submission) {
       return res.status(404).json({ error: 'Abgabe nicht gefunden' });
-    }
+    }// XP ist bereits in der Quest gespeichert (wurde beim Erstellen skaliert)
+      
     
     // Belohnungen nur bei approved vergeben
     if (grade === 'approved') {
