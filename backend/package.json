@@ -9,8 +9,7 @@
     "start": "node dist/server.js",
     "db:migrate": "tsx src/database/migrate.ts",
     "db:setup-admin": "tsx src/database/setup-admin.ts",
-    "db:seed": "tsx src/database/seed.ts",
-    "db:update-xp": "tsx src/database/update-quest-xp.ts"
+    "db:seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
