@@ -16,68 +16,55 @@ Ein RPG-inspiriertes Gamification-System für Fachinformatiker Auszubildende. En
 **Backend:** Node.js, Express, TypeScript, SQLite  
 **Frontend:** React, TypeScript, Vite, Tailwind CSS
 
-## 📋 Voraussetzungen
+## � Installation
 
-- Node.js (v18 oder höher)
-- npm
+### Für Entwickler (Lokal)
 
-## 🚀 Lokale Installation
+Für die lokale Entwicklung und zum Testen:
 
-### 1. Repository klonen
+1. **Repository klonen:**
+   ```bash
+   git clone https://github.com/idA-134/charakter-creator.git
+   cd charakter-creator
+   ```
+
+2. **Schnellstart:**
+   ```bash
+   # Backend einrichten
+   cd backend
+   npm install
+   cp .env.example .env  # Konfiguration anpassen
+   npm run db:migrate
+   npm run db:setup-admin
+   npm run dev
+   
+   # Frontend einrichten (neues Terminal)
+   cd frontend
+   npm install
+   cp .env.example .env
+   npm run dev
+   ```
+
+3. **Öffne im Browser:** http://localhost:5173
+
+### Für Server-Deployment (Linux)
+
+Für die Installation auf einem Linux-Server:
+
+**📖 Siehe die ausführliche [Installations-Anleitung](INSTALLATIONS-ANLEITUNG.md)**
+
+Die Anleitung erklärt Schritt für Schritt:
+- ✅ Alle benötigten Voraussetzungen
+- ✅ Was jeder Schritt genau macht
+- ✅ Verständlich auch für Nicht-Informatiker
+- ✅ Wartung und Problemlösung
+- ✅ Sicherheitshinweise
+
+**Automatisches Installations-Script:**
 ```bash
-git clone <repository-url>
-cd charakter_creation
+sudo ./install.sh
 ```
-
-### 2. Backend einrichten
-```bash
-cd backend
-npm install
-```
-
-Erstelle eine `.env` Datei im `backend/` Ordner:
-```env
-DATABASE_URL=./database.sqlite
-PORT=3000
-NODE_ENV=development
-JWT_SECRET=change-this-to-secure-random-string
-ALLOWED_ORIGINS=http://localhost:5173
-```
-
-### 3. Frontend einrichten
-```bash
-cd ../frontend
-npm install
-```
-
-Erstelle eine `.env` Datei im `frontend/` Ordner:
-```env
-VITE_API_URL=http://localhost:3000
-```
-
-### 4. Datenbank initialisieren
-```bash
-cd ../backend
-npm run db:migrate
-npm run db:setup-admin
-npm run db:seed  # Optional: Beispieldaten
-```
-
-### 5. Anwendung starten
-
-**Terminal 1 - Backend:**
-```bash
-cd backend
-npm run dev
-```
-
-**Terminal 2 - Frontend:**
-```bash
-cd frontend
-npm run dev
-```
-
-Die Anwendung ist dann verfügbar unter **http://localhost:5173**
+Das spielerische Script führt dich durch die komplette Installation! 🎮
 
 ## 📁 Projektstruktur
 
@@ -128,7 +115,7 @@ npm run build   # Production Build
 - Keine E-Mail-Adressen erforderlich
 - Alle Daten werden lokal gespeichert
 - Passwörter werden sicher gehasht
-- Für Production-Deployment siehe `DEPLOYMENT.md`
+- Für Production-Deployment siehe [INSTALLATIONS-ANLEITUNG.md](INSTALLATIONS-ANLEITUNG.md)
 
 ## 🔒 Sicherheit
 
