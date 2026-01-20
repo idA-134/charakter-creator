@@ -33,8 +33,15 @@ export default function Quests() {
     try {
       await questAPI.start(questId, Number(characterId));
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fehler beim Starten der Quest:', error);
+      const errorMsg = error.response?.data?.error || 'Fehler beim Starten der Quest';
+      const requiredEquipment = error.response?.data?.required_equipment;
+      if (requiredEquipment) {
+        alert(`Quest kann nicht gestartet werden: Ben\u00f6tigtes Equipment fehlt (${requiredEquipment})`);
+      } else {
+        alert(errorMsg);
+      }
     }
   };
 
@@ -42,8 +49,10 @@ export default function Quests() {
     try {
       await questAPI.complete(questId, Number(characterId));
       loadData();
-    } catch (error) {
-      console.error('Fehler beim Abschließen der Quest:', error);
+    } catch (error: any) {
+      console.error('Fehler beim Abschlie\u00dfen der Quest:', error);
+      const errorMsg = error.response?.data?.error || 'Fehler beim Abschlie\u00dfen der Quest';
+      alert(errorMsg);
     }
   };
 
@@ -111,6 +120,7 @@ export default function Quests() {
             quest={quest}
             onStart={handleStartQuest}
             onComplete={handleCompleteQuest}
+            onReload={loadData}
           />
         ))}
       </div>
@@ -140,11 +150,11 @@ function FilterButton({ active, onClick, children }: any) {
   );
 }
 
-function QuestCard({ quest, onStart, onComplete }: any) {
+function QuestCard({ quest, onStart, onComplete, onReload }: any) {
   const { characterId } = useParams<{ characterId: string }>();
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
-  const [submissionFileUrl, setSubmissionFileUrl] = useState('');
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
   
   const difficultyColors = {
     easy: 'bg-green-100 text-green-800',
@@ -163,9 +173,15 @@ function QuestCard({ quest, onStart, onComplete }: any) {
     completed: 'bg-green-100 text-green-800',
   };
   
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSubmissionFile(e.target.files[0]);
+    }
+  };
+  
   const handleSubmit = async () => {
-    if (!submissionText && !submissionFileUrl) {
-      alert('Bitte geben Sie Text ein oder eine Datei-URL an');
+    if (!submissionText && !submissionFile) {
+      alert('Bitte geben Sie Text ein oder laden Sie eine Datei hoch');
       return;
     }
     
@@ -173,23 +189,33 @@ function QuestCard({ quest, onStart, onComplete }: any) {
       console.log('Submitting quest:', quest.id);
       console.log('Character ID:', characterId);
       console.log('Submission text:', submissionText);
-      console.log('File URL:', submissionFileUrl);
+      console.log('File:', submissionFile);
       
-      const response = await api.post(`/quests/${quest.id}/submit`, {
-        characterId: Number(characterId),
-        submission_text: submissionText,
-        submission_file_url: submissionFileUrl
+      const formData = new FormData();
+      formData.append('characterId', characterId!);
+      if (submissionText) {
+        formData.append('submission_text', submissionText);
+      }
+      if (submissionFile) {
+        formData.append('file', submissionFile);
+      }
+      
+      const response = await api.post(`/quests/${quest.id}/submit`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
       
       console.log('Submission response:', response.data);
       alert('Abgabe erfolgreich eingereicht!');
       setShowSubmitForm(false);
       setSubmissionText('');
-      setSubmissionFileUrl('');
-      onComplete(); // Reload quests
-    } catch (error) {
+      setSubmissionFile(null);
+      onReload(); // Reload quests
+    } catch (error: any) {
       console.error('Fehler beim Einreichen:', error);
-      alert('Fehler beim Einreichen der Abgabe');
+      const errorMsg = error.response?.data?.error || 'Fehler beim Einreichen der Abgabe';
+      alert(errorMsg);
     }
   };
   
@@ -257,13 +283,22 @@ function QuestCard({ quest, onStart, onComplete }: any) {
             rows={4}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 text-sm"
           />
-          <input
-            type="text"
-            placeholder="Datei-URL (optional, z.B. GitHub-Link)"
-            value={submissionFileUrl}
-            onChange={(e) => setSubmissionFileUrl(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 text-sm"
-          />
+          <div className="mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Datei hochladen (optional)
+            </label>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.jpg,.jpeg,.png,.gif,.webp,.txt,.html,.css,.js,.json,.xml,.mp4,.webm"
+            />
+            {submissionFile && (
+              <p className="text-xs text-gray-600 mt-1">
+                Ausgewählt: {submissionFile.name} ({(submissionFile.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
+          </div>
           <div className="flex gap-2">
             <button
               onClick={handleSubmit}
@@ -272,7 +307,11 @@ function QuestCard({ quest, onStart, onComplete }: any) {
               Abgabe einreichen
             </button>
             <button
-              onClick={() => setShowSubmitForm(false)}
+              onClick={() => {
+                setShowSubmitForm(false);
+                setSubmissionText('');
+                setSubmissionFile(null);
+              }}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
             >
               Abbrechen

@@ -43,6 +43,7 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       is_title_quest,
       title_reward,
       equipment_reward_id,
+      required_equipment_id,
       min_level,
       prerequisite_quest_id,
       created_by_user_id
@@ -67,17 +68,18 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
         title, description, category, difficulty, xp_reward,
         programmierung_reward, netzwerke_reward, datenbanken_reward,
         hardware_reward, sicherheit_reward, projektmanagement_reward,
-        is_title_quest, title_reward, equipment_reward_id,
+        is_title_quest, title_reward, equipment_reward_id, required_equipment_id,
         min_level, prerequisite_quest_id, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const info = stmt.run(
       title, description, category, difficulty, presetXP,
       programmierung_reward || 0, netzwerke_reward || 0, datenbanken_reward || 0,
       hardware_reward || 0, sicherheit_reward || 0, projektmanagement_reward || 0,
-      is_title_quest ? 1 : 0, title_reward, equipment_reward_id,
-      min_level || 1, prerequisite_quest_id, created_by_user_id
+      is_title_quest ? 1 : 0, title_reward || null, 
+      equipment_reward_id || null, required_equipment_id || null,
+      questMinLevel, prerequisite_quest_id || null, created_by_user_id
     );
     
     const newQuest = db.prepare('SELECT * FROM quests WHERE id = ?').get(info.lastInsertRowid);
@@ -129,11 +131,12 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
       `);
       
       for (const member of members) {
-        if (member.character_id) {
-          questAssignStmt.run(member.character_id, questId);
+        const typedMember = member as any;
+        if (typedMember.character_id) {
+          questAssignStmt.run(typedMember.character_id, questId);
           // Notification an User senden
           createNotification(
-            member.id,
+            typedMember.id,
             'quest_assigned',
             'Neue Quest zugewiesen',
             `Dir wurde die Quest "${questTitle}" zugewiesen!`
@@ -326,6 +329,46 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
   }
 });
 
+// Alle Quests abrufen (Admin - alle, Dozent - nur eigene)
+dozentRouter.get('/quests/all', requireDozent, async (req, res) => {
+  try {
+    const { userId, isAdmin } = req.query;
+    
+    let query = `
+      SELECT q.*,
+             u.username as created_by_username,
+             COUNT(DISTINCT qa.id) as assignment_count,
+             COUNT(DISTINCT cq.id) as submission_count
+      FROM quests q
+      LEFT JOIN users u ON q.created_by_user_id = u.id
+      LEFT JOIN quest_assignments qa ON q.id = qa.quest_id
+      LEFT JOIN character_quests cq ON q.id = cq.quest_id AND cq.submitted_at IS NOT NULL
+    `;
+    
+    const params: any[] = [];
+    
+    // Admin sieht alle Quests, Dozent nur eigene
+    if (isAdmin !== 'true' && userId) {
+      query += ' WHERE q.created_by_user_id = ?';
+      params.push(userId);
+    }
+    
+    query += `
+      GROUP BY q.id
+      ORDER BY q.created_at DESC
+    `;
+    
+    const quests = params.length > 0 
+      ? db.prepare(query).all(...params)
+      : db.prepare(query).all();
+    
+    res.json(quests);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Quests:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
 // Alle eigenen Quests abrufen (Dozent)
 dozentRouter.get('/quests/my/:userId', requireDozent, async (req, res) => {
   try {
@@ -358,7 +401,7 @@ dozentRouter.put('/quests/:questId', requireDozent, async (req, res) => {
       title, description, category, difficulty, xp_reward,
       programmierung_reward, netzwerke_reward, datenbanken_reward,
       hardware_reward, sicherheit_reward, projektmanagement_reward,
-      is_title_quest, title_reward, equipment_reward_id,
+      is_title_quest, title_reward, equipment_reward_id, required_equipment_id,
       min_level, prerequisite_quest_id
     } = req.body;
     
@@ -378,6 +421,7 @@ dozentRouter.put('/quests/:questId', requireDozent, async (req, res) => {
           is_title_quest = COALESCE(?, is_title_quest),
           title_reward = COALESCE(?, title_reward),
           equipment_reward_id = COALESCE(?, equipment_reward_id),
+          required_equipment_id = COALESCE(?, required_equipment_id),
           min_level = COALESCE(?, min_level),
           prerequisite_quest_id = COALESCE(?, prerequisite_quest_id)
       WHERE id = ?
@@ -388,7 +432,7 @@ dozentRouter.put('/quests/:questId', requireDozent, async (req, res) => {
       programmierung_reward, netzwerke_reward, datenbanken_reward,
       hardware_reward, sicherheit_reward, projektmanagement_reward,
       is_title_quest !== undefined ? (is_title_quest ? 1 : 0) : null,
-      title_reward, equipment_reward_id, min_level, prerequisite_quest_id,
+      title_reward, equipment_reward_id, required_equipment_id, min_level, prerequisite_quest_id,
       questId
     );
     

@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { db } from '../database/db';
 import { createNotification } from './notification.routes';
+import { upload, getRelativePath, getAbsolutePath } from '../middleware/upload';
+import path from 'path';
+import fs from 'fs';
 
 export const questRouter = Router();
 
@@ -128,19 +131,23 @@ questRouter.post('/:questId/start', async (req, res) => {
   }
 });
 
-// Abgabe einreichen (NWK)
-questRouter.post('/:questId/submit', async (req, res) => {
+// Abgabe einreichen (mit optionalem Datei-Upload)
+questRouter.post('/:questId/submit', upload.single('file'), async (req, res) => {
   try {
     const { questId } = req.params;
-    const { characterId, submission_text, submission_file_url } = req.body;
+    const { characterId, submission_text } = req.body;
     
     if (!characterId) {
       return res.status(400).json({ error: 'characterId erforderlich' });
     }
     
-    if (!submission_text && !submission_file_url) {
-      return res.status(400).json({ error: 'Mindestens Text oder Datei-URL erforderlich' });
+    // Mindestens Text oder Datei muss vorhanden sein
+    if (!submission_text && !req.file) {
+      return res.status(400).json({ error: 'Mindestens Text oder Datei erforderlich' });
     }
+    
+    // Speichere relativen Pfad der hochgeladenen Datei
+    const submission_file_url = req.file ? getRelativePath(req.file.path) : null;
     
     const stmt = db.prepare(`
       UPDATE character_quests
@@ -150,7 +157,7 @@ questRouter.post('/:questId/submit', async (req, res) => {
           status = 'submitted'
       WHERE character_id = ? AND quest_id = ?
     `);
-    const info = stmt.run(submission_text, submission_file_url, characterId, questId);
+    const info = stmt.run(submission_text || null, submission_file_url, characterId, questId);
     
     if (info.changes === 0) {
       return res.status(404).json({ error: 'Quest-Zuordnung nicht gefunden' });
@@ -171,7 +178,7 @@ questRouter.post('/:questId/submit', async (req, res) => {
         questInfo.created_by_user_id,
         'submission_received',
         'Neue Abgabe eingegangen',
-        `${questInfo.character_name} hat die Quest "${questInfo.title}" abgegeben!`
+        `${questInfo.character_name} hat die Quest "${questInfo.title}" abgegeben!${req.file ? ' (mit Datei)' : ''}`
       );
     }
     
@@ -264,6 +271,45 @@ questRouter.post('/:questId/complete', async (req, res) => {
     });
   } catch (error) {
     console.error('Fehler beim Abschließen der Quest:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Datei herunterladen
+questRouter.get('/submission/:submissionId/download', async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    
+    // Hole Submission-Info aus DB
+    const submission: any = db.prepare(`
+      SELECT submission_file_url, quest_id
+      FROM character_quests
+      WHERE id = ?
+    `).get(submissionId);
+    
+    if (!submission || !submission.submission_file_url) {
+      return res.status(404).json({ error: 'Datei nicht gefunden' });
+    }
+    
+    const filePath = getAbsolutePath(submission.submission_file_url);
+    
+    // Prüfe ob Datei existiert
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Datei existiert nicht auf dem Server' });
+    }
+    
+    // Sende Datei zum Download
+    const fileName = path.basename(filePath);
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Fehler beim Senden der Datei:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Fehler beim Herunterladen der Datei' });
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Fehler beim Datei-Download:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
