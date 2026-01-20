@@ -20,6 +20,7 @@ const addNewColumns = () => {
       { name: 'is_title_quest', type: 'INTEGER DEFAULT 0' },
       { name: 'title_reward', type: 'TEXT' },
       { name: 'equipment_reward_id', type: 'INTEGER' },
+      { name: 'required_equipment_id', type: 'INTEGER' },
       { name: 'prerequisite_quest_id', type: 'INTEGER' },
       { name: 'created_by_user_id', type: 'INTEGER' }
     ];

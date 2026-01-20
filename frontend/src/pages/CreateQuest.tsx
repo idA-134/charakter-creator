@@ -44,6 +44,8 @@ export default function CreateQuest() {
     try {
       await api.post('/dozent/quests', {
         ...formData,
+        equipment_reward_id: formData.equipment_reward_id || null,
+        required_equipment_id: formData.required_equipment_id || null,
         created_by_user_id: user.id
       });
       
