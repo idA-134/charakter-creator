@@ -28,45 +28,52 @@ XP = Basis-XP × (1 + (Mindestlevel - 1) × 0.25)
 
 ### Easy Quests (Basis: 50 XP)
 
-| Min-Level | XP-Belohnung | Erhöhung |
-|-----------|--------------|----------|
-| 1         | 50 XP        | -        |
-| 3         | 75 XP        | +50%     |
-| 5         | 100 XP       | +100%    |
-| 10        | 162 XP       | +224%    |
-| 15        | 225 XP       | +350%    |
-| 20        | 287 XP       | +474%    |
+| Min-Level | XP-Belohnung | % eines Levels |
+|-----------|--------------|----------------|
+| 1         | 50 XP        | 50%            |
+| 3         | 75 XP        | 30%            |
+| 5         | 100 XP       | 20%            |
+| 9         | 150 XP       | 6%             |
+| 10+       | **200 XP**   | **5%** (fest)  |
+
+Ab Level 10 bleibt die Belohnung konstant bei **200 XP = 5% eines Levels**.
 
 ### Medium Quests (Basis: 100 XP)
 
-| Min-Level | XP-Belohnung | Erhöhung |
-|-----------|--------------|----------|
-| 1         | 100 XP       | -        |
-| 3         | 150 XP       | +50%     |
-| 5         | 200 XP       | +100%    |
-| 10        | 325 XP       | +225%    |
-| 15        | 450 XP       | +350%    |
-| 20        | 575 XP       | +475%    |
+| Min-Level | XP-Belohnung | % eines Levels |
+|-----------|--------------|----------------|
+| 1         | 100 XP       | 100%           |
+| 3         | 150 XP       | 60%            |
+| 5         | 200 XP       | 40%            |
+| 9         | 300 XP       | 12%            |
+| 10+       | **400 XP**   | **10%** (fest) |
+
+Ab Level 10 bleibt die Belohnung konstant bei **400 XP = 10% eines Levels**.
 
 ### Hard Quests (Basis: 200 XP)
 
-| Min-Level | XP-Belohnung | Erhöhung |
-|-----------|--------------|----------|
-| 1         | 200 XP       | -        |
-| 3         | 300 XP       | +50%     |
-| 5         | 400 XP       | +100%    |
-| 10        | 650 XP       | +225%    |
-| 15        | 900 XP       | +350%    |
-| 20        | 1.150 XP     | +475%    |
+| Min-Level | XP-Belohnung | % eines Levels |
+|-----------|--------------|----------------|
+| 1         | 200 XP       | 200%           |
+| 3         | 300 XP       | 120%           |
+| 5         | 400 XP       | 80%            |
+| 9         | 600 XP       | 23%            |
+| 10+       | **800 XP**   | **20%** (fest) |
+
+Ab Level 10 bleibt die Belohnung konstant bei **800 XP = 20% eines Levels**.
 
 ---
 
 ## 🎮 Level-Progression (Zur Erinnerung)
 
-Das Charakter-Level selbst benötigt exponentiell steigende XP:
+Das Charakter-Level benötigt bis Level 10 exponentiell steigende XP, danach eine feste Summe:
 
 ```typescript
+// Levels 1-9:
 XP für Level N = 100 × 1.5^(N-1)
+
+// Ab Level 10:
+XP für Level N = 4000 (fest)
 ```
 
 | Level | XP benötigt | Gesamt XP |
@@ -75,42 +82,61 @@ XP für Level N = 100 × 1.5^(N-1)
 | 2 → 3 | 150         | 250       |
 | 3 → 4 | 225         | 475       |
 | 5 → 6 | 506         | 1.318     |
-| 10 → 11 | 3.843     | 11.329    |
-| 15 → 16 | 29.185    | 87.353    |
-| 20 → 21 | 221.623   | 664.666   |
+| 9 → 10 | 2.562     | 7.486     |
+| 10 → 11 | 4.000     | 11.486    |
+| 11 → 12 | 4.000     | 15.486    |
+| 15 → 16 | 4.000     | 31.486    |
+| 20 → 21 | 4.000     | 51.486    |
+| 30 → 31 | 4.000     | 91.486    |
+| 40 → 41 | 4.000     | 131.486   |
+| 49 → 50 | 4.000     | 167.486   |
+| **50** | **MAX LEVEL** | - |
 
 ---
 
 ## ⚖️ Balancing-Überlegungen
 
-### Warum 0.25 als Skalierungsfaktor?
+### Warum 0.25 als Skalierungsfaktor (bis Level 9)?
 
-Der Faktor **0.25** (25% pro Level) wurde gewählt, weil:
+Der Faktor **0.25** (25% pro Level) für Level 1-9 wurde gewählt, weil:
 
 1. **Moderate Skalierung:** Nicht zu schnell, nicht zu langsam
 2. **Fair für alle Level:** Anfänger können aufholen, Fortgeschrittene werden belohnt
 3. **Einfach zu berechnen:** Klare, verständliche Mathematik
+
+### Ab Level 10: Feste prozentuale Belohnung
+
+Ab Level 10 beträgt jedes Level fest **4000 XP**. Daher erhalten Quests ab Level 10 eine feste prozentuale Belohnung:
+
+- **Easy Quest:** 5% eines Levels = **200 XP**
+- **Medium Quest:** 10% eines Levels = **400 XP**
+- **Hard Quest:** 20% eines Levels = **800 XP**
+
+Dies sorgt für:
+- ✅ **Konsistente Progression** ab Level 10
+- ✅ **Berechenbare Belohnungen** für Spieler
+- ✅ **Keine Inflation** bei höheren Levels
 
 ### Beispiel-Szenarien
 
 #### Szenario 1: Level 10 Spieler
 
 Ein Level 10 Spieler kann:
-- **Easy Quest (Level 10):** 162 XP → 4-5% des nächsten Levels
-- **Medium Quest (Level 10):** 325 XP → 8-10% des nächsten Levels  
-- **Hard Quest (Level 10):** 650 XP → 16-20% des nächsten Levels
+- **Easy Quest (Level 10+):** 200 XP → 5% des nächsten Levels
+- **Medium Quest (Level 10+):** 400 XP → 10% des nächsten Levels  
+- **Hard Quest (Level 10+):** 800 XP → 20% des nächsten Levels
 
 #### Szenario 2: Level 5 Spieler macht Quest für Level 10
 
 Ein Level 5 Spieler sieht die Quest, aber:
 - ❌ Kann sie nicht starten (Mindestlevel-Sperre)
-- ✅ Weiß, dass sie **162-650 XP** bringt
+- ✅ Weiß, dass sie **200-800 XP** bringt
 - 🎯 Hat Motivation, Level 10 zu erreichen
 
-#### Szenario 3: Level 15 Spieler macht alte Level 1 Quest
+#### Szenario 3: Level 25 Spieler macht alte Level 1 Quest
 
 - Quest gibt nur 50-200 XP (Basis-Wert)
-- Ineffizient für Fortschritt
+- Ineffizient für Fortschritt (< 5% eines Levels)
 - ✅ Fördert, dass Spieler neue, anspruchsvolle Quests machen
 
 ---
@@ -123,8 +149,21 @@ Ein Level 5 Spieler sieht die Quest, aber:
 // backend/src/routes/dozent.routes.ts
 
 function calculateScaledXP(baseXP: number, minLevel: number): number {
-  const scalingFactor = 1 + (minLevel - 1) * 0.25;
-  return Math.floor(baseXP * scalingFactor);
+  // Für Level 1-9: Exponentielle Skalierung
+  if (minLevel < 10) {
+    const scalingFactor = 1 + (minLevel - 1) * 0.25;
+    return Math.floor(baseXP * scalingFactor);
+  }
+  
+  // Ab Level 10: Feste prozentuale Belohnung (basierend auf 4000 XP pro Level)
+  // Easy: 5%, Medium: 10%, Hard: 20%
+  const percentages: { [key: number]: number } = {
+    50: 0.05,   // Easy
+    100: 0.10,  // Medium
+    200: 0.20   // Hard
+  };
+  
+  return Math.floor(4000 * (percentages[baseXP] || 0.10));
 }
 
 // Wird automatisch aufgerufen:
@@ -272,12 +311,21 @@ Vorschläge für die UI:
 
 ## 📞 Feedback
 
-Sollte das Balancing angepasst werden, ändere einfach den Skalierungsfaktor in:
+Sollte das Balancing angepasst werden, ändere einfach die Werte in:
 
-**`backend/src/routes/dozent.routes.ts`**, Zeile ~25:
+**`backend/src/routes/dozent.routes.ts`**:
 
 ```typescript
+// Für Level 1-9:
 const scalingFactor = 1 + (minLevel - 1) * 0.25;  // ← Hier anpassen!
+
+// Ab Level 10:
+// Easy: 5%, Medium: 10%, Hard: 20% von 4000 XP
+const percentages: { [key: number]: number } = {
+  50: 0.05,   // Easy - ändern für mehr/weniger XP
+  100: 0.10,  // Medium - ändern für mehr/weniger XP
+  200: 0.20   // Hard - ändern für mehr/weniger XP
+};
 ```
 
 Dann:

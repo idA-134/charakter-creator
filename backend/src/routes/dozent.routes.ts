@@ -11,18 +11,37 @@ const requireDozent = (req: any, res: any, next: any) => {
 
 /**
  * Berechnet skalierte XP basierend auf Mindestlevel der Quest
- * Formel: baseXP * (1 + (minLevel - 1) * 0.25)
  * 
- * Beispiele:
+ * Level 1-9: Formel: baseXP * (1 + (minLevel - 1) * 0.25)
+ * Level 10+: Feste prozentuale Belohnung basierend auf 4000 XP pro Level
+ * 
+ * Beispiele Level 1-9:
  * - Level 1: 100 XP * 1.0 = 100 XP
  * - Level 3: 100 XP * 1.5 = 150 XP
  * - Level 5: 100 XP * 2.0 = 200 XP
- * - Level 10: 100 XP * 3.25 = 325 XP
- * - Level 20: 100 XP * 5.75 = 575 XP
+ * - Level 9: 100 XP * 3.0 = 300 XP
+ * 
+ * Ab Level 10:
+ * - Easy (50 base): 5% von 4000 = 200 XP
+ * - Medium (100 base): 10% von 4000 = 400 XP
+ * - Hard (200 base): 20% von 4000 = 800 XP
  */
 function calculateScaledXP(baseXP: number, minLevel: number): number {
-  const scalingFactor = 1 + (minLevel - 1) * 0.25;
-  return Math.floor(baseXP * scalingFactor);
+  // Für Level 1-9: Exponentielle Skalierung
+  if (minLevel < 10) {
+    const scalingFactor = 1 + (minLevel - 1) * 0.25;
+    return Math.floor(baseXP * scalingFactor);
+  }
+  
+  // Ab Level 10: Feste prozentuale Belohnung (basierend auf 4000 XP pro Level)
+  // Easy: 5%, Medium: 10%, Hard: 20%
+  const percentages: { [key: number]: number } = {
+    50: 0.05,   // Easy
+    100: 0.10,  // Medium
+    200: 0.20   // Hard
+  };
+  
+  return Math.floor(4000 * (percentages[baseXP] || 0.10));
 }
 
 // Quest erstellen (Dozent)
@@ -252,15 +271,27 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
       const finalSec = submission.sicherheit_reward;
       const finalPM = submission.projektmanagement_reward;
       
-      // Level-Up-Logik
+      // Level-Up-Logik mit Level Cap (50)
       let newXp = submission.current_xp + finalXP;
       let newLevel = submission.current_level;
       let xpToNext = submission.xp_to_next_level;
       
-      while (newXp >= xpToNext) {
+      while (newXp >= xpToNext && newLevel < 50) {
         newXp -= xpToNext;
         newLevel += 1;
-        xpToNext = Math.floor(100 * Math.pow(1.5, newLevel - 1));
+        
+        // Ab Level 10: Feste 4000 XP pro Level
+        // Davor: Exponentielles Wachstum
+        if (newLevel >= 10) {
+          xpToNext = 4000;
+        } else {
+          xpToNext = Math.floor(100 * Math.pow(1.5, newLevel - 1));
+        }
+      }
+      
+      // Bei Max-Level überschüssige XP begrenzen
+      if (newLevel >= 50) {
+        newXp = Math.min(newXp, xpToNext - 1);
       }
       
       // Belohnungen vergeben mit Level-Up
