@@ -39,6 +39,9 @@ export const achievementAPI = {
   getAll: () => api.get('/achievements'),
   getByCharacter: (characterId: number) => api.get(`/achievements/character/${characterId}`),
   check: (characterId: number) => api.post(`/achievements/character/${characterId}/check`),
+  getTitles: (characterId: number) => api.get(`/achievements/character/${characterId}/titles`),
+  setActiveTitle: (characterId: number, titleId: number) => 
+    api.post(`/achievements/character/${characterId}/titles/set-active`, { titleId }),
 };
 
 // Leaderboard API

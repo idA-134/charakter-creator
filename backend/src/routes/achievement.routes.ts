@@ -134,3 +134,80 @@ achievementRouter.post('/character/:characterId/check', async (req, res) => {
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
+
+// Alle verfügbaren Titel eines Characters abrufen
+achievementRouter.get('/character/:characterId/titles', async (req, res) => {
+  try {
+    const { characterId } = req.params;
+    
+    const stmt = db.prepare(
+      `SELECT 
+         id,
+         title,
+         unlocked_at,
+         is_active
+       FROM character_titles
+       WHERE character_id = ?
+       ORDER BY is_active DESC, unlocked_at DESC`
+    );
+    const titles = stmt.all(characterId);
+    
+    res.json(titles);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Titel:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Aktiven Titel setzen
+achievementRouter.post('/character/:characterId/titles/set-active', async (req, res) => {
+  try {
+    const { characterId } = req.params;
+    const { titleId } = req.body;
+    
+    if (!titleId) {
+      return res.status(400).json({ error: 'titleId erforderlich' });
+    }
+    
+    // Prüfen ob Titel dem Character gehört
+    const checkStmt = db.prepare(
+      'SELECT title FROM character_titles WHERE id = ? AND character_id = ?'
+    );
+    const titleData: any = checkStmt.get(titleId, characterId);
+    
+    if (!titleData) {
+      return res.status(404).json({ error: 'Titel nicht gefunden oder gehört nicht dem Character' });
+    }
+    
+    // Transaction: Alle Titel deaktivieren, dann den gewählten aktivieren
+    const transaction = db.transaction(() => {
+      // Alle Titel deaktivieren
+      const deactivateStmt = db.prepare(
+        'UPDATE character_titles SET is_active = 0 WHERE character_id = ?'
+      );
+      deactivateStmt.run(characterId);
+      
+      // Gewählten Titel aktivieren
+      const activateStmt = db.prepare(
+        'UPDATE character_titles SET is_active = 1 WHERE id = ?'
+      );
+      activateStmt.run(titleId);
+      
+      // Character-Titel aktualisieren
+      const updateCharStmt = db.prepare(
+        'UPDATE characters SET title = ?, updated_at = datetime(\'now\') WHERE id = ?'
+      );
+      updateCharStmt.run(titleData.title, characterId);
+    });
+    
+    transaction();
+    
+    res.json({ 
+      message: 'Titel erfolgreich gesetzt',
+      title: titleData.title 
+    });
+  } catch (error) {
+    console.error('Fehler beim Setzen des Titels:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});

@@ -101,6 +101,20 @@ const addNewColumns = () => {
     `);
     console.log('✅ quest_assignments Tabelle erstellt');
     
+    // Character_titles Tabelle für errungene Titel erstellen
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS character_titles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        character_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        unlocked_at TEXT DEFAULT (datetime('now')),
+        is_active INTEGER DEFAULT 0,
+        FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+        UNIQUE(character_id, title)
+      )
+    `);
+    console.log('✅ character_titles Tabelle erstellt');
+    
     console.log('\n✅ Datenbank-Schema erfolgreich erweitert!');
   } catch (error) {
     console.error('❌ Fehler beim Erweitern des Schemas:', error);

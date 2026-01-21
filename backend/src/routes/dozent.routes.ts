@@ -317,8 +317,25 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
       
       // Titel vergeben falls Titel-Quest
       if (submission.is_title_quest && submission.title_reward) {
+        // Titel zur character_titles Tabelle hinzufügen
+        const addTitleStmt = db.prepare(`
+          INSERT OR IGNORE INTO character_titles (character_id, title, is_active)
+          VALUES (?, ?, 0)
+        `);
+        addTitleStmt.run(submission.character_id, submission.title_reward);
+        
+        // Optional: Titel direkt als aktiv setzen und Character-Titel aktualisieren
+        // (kann später vom User geändert werden)
         const titleStmt = db.prepare('UPDATE characters SET title = ? WHERE id = ?');
         titleStmt.run(submission.title_reward, submission.character_id);
+        
+        // Titel als aktiv markieren
+        const activateTitleStmt = db.prepare(`
+          UPDATE character_titles 
+          SET is_active = 1 
+          WHERE character_id = ? AND title = ?
+        `);
+        activateTitleStmt.run(submission.character_id, submission.title_reward);
       }
       
       // Equipment vergeben falls vorhanden
