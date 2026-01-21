@@ -9,7 +9,7 @@ Ein RPG-inspiriertes Gamification-System für Fachinformatiker Auszubildende. En
 - **Achievements & Belohnungen** zum Freischalten
 - **Ausrüstungssystem** mit verschiedenen Raritätsstufen
 - **Leaderboards** zum Vergleichen mit anderen
-- **Level-System** von 1-99 mit XP-Progression
+- **Level-System** von 1-50 mit XP-Progression
 
 ## 🛠️ Tech Stack
 

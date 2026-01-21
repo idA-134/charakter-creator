@@ -111,7 +111,14 @@ characterRouter.post('/:id/xp', async (req, res) => {
     while (newXp >= xpToNext) {
       newXp -= xpToNext;
       newLevel += 1;
-      xpToNext = Math.floor(100 * Math.pow(1.5, newLevel - 1)); // Exponentielles Wachstum
+      
+      // Ab Level 10: Feste 4000 XP pro Level
+      // Davor: Exponentielles Wachstum
+      if (newLevel >= 10) {
+        xpToNext = 4000;
+      } else {
+        xpToNext = Math.floor(100 * Math.pow(1.5, newLevel - 1));
+      }
     }
     
     // Character aktualisieren

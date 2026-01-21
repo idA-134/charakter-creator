@@ -33,18 +33,19 @@ questRouter.get('/character/:characterId', async (req, res) => {
     
     const characterLevel = (character as any).level;
     
-    // Quests mit Status abrufen
+    // Nur zugewiesene Quests für Nachwuchskräfte anzeigen
+    // Eine Quest ist zugewiesen, wenn ein Eintrag in character_quests existiert
     const questsStmt = db.prepare(
       `SELECT 
          q.*,
-         COALESCE(cq.status, 'available') as status,
+         cq.status,
          cq.started_at,
          cq.completed_at,
          cq.grade,
          cq.feedback,
          eq.name as required_equipment_name
        FROM quests q
-       LEFT JOIN character_quests cq ON q.id = cq.quest_id AND cq.character_id = ?
+       INNER JOIN character_quests cq ON q.id = cq.quest_id AND cq.character_id = ?
        LEFT JOIN equipment eq ON q.required_equipment_id = eq.id
        WHERE q.min_level <= ?
        ORDER BY q.min_level ASC, q.difficulty ASC`
@@ -66,6 +67,12 @@ questRouter.get('/character/:characterId', async (req, res) => {
         quest.has_required_equipment = true;
         quest.is_locked = false;
       }
+      
+      // Status standardmäßig auf 'available' setzen, falls nicht definiert
+      if (!quest.status) {
+        quest.status = 'available';
+      }
+      
       return quest;
     });
     
