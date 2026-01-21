@@ -3,10 +3,18 @@ import { useParams, Link } from 'react-router-dom';
 import { achievementAPI, characterAPI } from '../services/api';
 import { Achievement, Character } from '../types';
 
+interface Title {
+  id: number;
+  title: string;
+  unlocked_at: string;
+  is_active: number;
+}
+
 export default function Achievements() {
   const { characterId } = useParams<{ characterId: string }>();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [character, setCharacter] = useState<Character | null>(null);
+  const [titles, setTitles] = useState<Title[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
 
@@ -16,16 +24,27 @@ export default function Achievements() {
 
   const loadData = async () => {
     try {
-      const [achievementsRes, charRes] = await Promise.all([
+      const [achievementsRes, charRes, titlesRes] = await Promise.all([
         achievementAPI.getByCharacter(Number(characterId)),
-        characterAPI.getById(Number(characterId))
+        characterAPI.getById(Number(characterId)),
+        achievementAPI.getTitles(Number(characterId))
       ]);
       setAchievements(achievementsRes.data);
       setCharacter(charRes.data);
+      setTitles(titlesRes.data);
     } catch (error) {
       console.error('Fehler beim Laden:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetActiveTitle = async (titleId: number) => {
+    try {
+      await achievementAPI.setActiveTitle(Number(characterId), titleId);
+      await loadData(); // Neu laden um aktualisierten Status zu zeigen
+    } catch (error) {
+      console.error('Fehler beim Setzen des Titels:', error);
     }
   };
 
@@ -73,6 +92,39 @@ export default function Achievements() {
           />
         </div>
       </div>
+
+      {/* Titel Section */}
+      {titles.length > 0 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">🎖️ Errungene Titel</h2>
+          <p className="text-gray-600 mb-4">
+            Du hast {titles.length} Titel freigeschaltet. Wähle einen, um ihn zu tragen!
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {titles.map((title) => (
+              <button
+                key={title.id}
+                onClick={() => handleSetActiveTitle(title.id)}
+                className={`p-4 rounded-lg border-2 transition-all text-left ${
+                  title.is_active 
+                    ? 'border-yellow-400 bg-yellow-50 shadow-md' 
+                    : 'border-gray-200 hover:border-primary-400 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-lg">{title.title}</span>
+                  {title.is_active && (
+                    <span className="text-yellow-600 text-xl">✓</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-2">
+                  Freigeschaltet: {new Date(title.unlocked_at).toLocaleDateString('de-DE')}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
