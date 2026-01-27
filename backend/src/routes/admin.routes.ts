@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../database/db';
+import { createNotification } from './notification.routes';
 
 export const adminRouter = Router();
 
@@ -139,6 +140,167 @@ adminRouter.get('/users/dozenten', requireAdmin, async (req, res) => {
     res.json(dozenten);
   } catch (error) {
     console.error('Fehler beim Abrufen der Dozenten:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Alle offenen Abgaben abrufen (Admin kann alle bewerten)
+adminRouter.get('/submissions', requireAdmin, async (req, res) => {
+  try {
+    const submissions = db.prepare(`
+      SELECT cq.*, c.name as character_name, c.level,
+             u.id as user_id, u.username,
+             q.title as quest_title, q.created_by_user_id,
+             du.username as created_by_username
+      FROM character_quests cq
+      JOIN characters c ON cq.character_id = c.id
+      JOIN users u ON c.user_id = u.id
+      JOIN quests q ON cq.quest_id = q.id
+      LEFT JOIN users du ON q.created_by_user_id = du.id
+      WHERE cq.submitted_at IS NOT NULL AND cq.grade IS NULL
+      ORDER BY cq.submitted_at DESC
+    `).all();
+    
+    res.json(submissions);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Abgaben:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Abgabe bewerten (Admin kann alle bewerten)
+adminRouter.post('/submissions/:submissionId/grade', requireAdmin, async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { grade, feedback, admin_user_id } = req.body;
+    
+    if (!grade || !admin_user_id) {
+      return res.status(400).json({ error: 'Grade und admin_user_id erforderlich' });
+    }
+    
+    // Nur 'approved' oder 'rejected' erlaubt
+    if (grade !== 'approved' && grade !== 'rejected') {
+      return res.status(400).json({ error: 'Grade muss "approved" oder "rejected" sein' });
+    }
+    
+    // Bei rejected muss feedback vorhanden sein
+    if (grade === 'rejected' && !feedback) {
+      return res.status(400).json({ error: 'Bei Ablehnung ist eine Begründung erforderlich' });
+    }
+    
+    // Abgabe als bewertet markieren
+    const updateStmt = db.prepare(`
+      UPDATE character_quests
+      SET grade = ?, feedback = ?, graded_at = datetime('now'), 
+          graded_by_user_id = ?, status = ?,
+          completed_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE NULL END
+      WHERE id = ?
+    `);
+    updateStmt.run(
+      grade, 
+      feedback, 
+      admin_user_id, 
+      grade === 'approved' ? 'completed' : 'rejected',
+      grade,
+      submissionId
+    );
+    
+    // Quest-Informationen abrufen für Belohnungen
+    const submission: any = db.prepare(`
+      SELECT cq.*, q.*, c.id as character_id, c.xp as current_xp, c.level as current_level, c.xp_to_next_level
+      FROM character_quests cq
+      JOIN quests q ON cq.quest_id = q.id
+      JOIN characters c ON cq.character_id = c.id
+      WHERE cq.id = ?
+    `).get(submissionId);
+    
+    if (!submission) {
+      return res.status(404).json({ error: 'Abgabe nicht gefunden' });
+    }
+    
+    // Belohnungen nur bei approved vergeben
+    if (grade === 'approved') {
+      const finalXP = submission.xp_reward;
+      const finalProg = submission.programmierung_reward;
+      const finalNetz = submission.netzwerke_reward;
+      const finalDB = submission.datenbanken_reward;
+      const finalHW = submission.hardware_reward;
+      const finalSec = submission.sicherheit_reward;
+      const finalPM = submission.projektmanagement_reward;
+      
+      // Level-Up-Logik mit Level Cap (50)
+      let newXp = submission.current_xp + finalXP;
+      let newLevel = submission.current_level;
+      let xpToNext = submission.xp_to_next_level;
+      
+      while (newXp >= xpToNext && newLevel < 50) {
+        newXp -= xpToNext;
+        newLevel += 1;
+        
+        if (newLevel >= 10) {
+          xpToNext = 4000;
+        } else {
+          xpToNext = Math.floor(100 * Math.pow(1.5, newLevel - 1));
+        }
+      }
+      
+      if (newLevel >= 50) {
+        newXp = Math.min(newXp, xpToNext - 1);
+      }
+      
+      // Belohnungen vergeben mit Level-Up
+      const rewardStmt = db.prepare(`
+        UPDATE characters
+        SET xp = ?,
+            level = ?,
+            xp_to_next_level = ?,
+            programmierung = MIN(programmierung + ?, 100),
+            netzwerke = MIN(netzwerke + ?, 100),
+            datenbanken = MIN(datenbanken + ?, 100),
+            hardware = MIN(hardware + ?, 100),
+            sicherheit = MIN(sicherheit + ?, 100),
+            projektmanagement = MIN(projektmanagement + ?, 100),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `);
+      rewardStmt.run(
+        newXp, newLevel, xpToNext,
+        finalProg, finalNetz, finalDB, finalHW, finalSec, finalPM,
+        submission.character_id
+      );
+      
+      // Titel vergeben falls Titel-Quest
+      if (submission.is_title_quest && submission.title_reward) {
+        const addTitleStmt = db.prepare(`
+          INSERT OR IGNORE INTO character_titles (character_id, title, is_active)
+          VALUES (?, ?, 0)
+        `);
+        addTitleStmt.run(submission.character_id, submission.title_reward);
+        
+        const titleStmt = db.prepare('UPDATE characters SET title = ? WHERE id = ?');
+        titleStmt.run(submission.title_reward, submission.character_id);
+        
+        const activateTitleStmt = db.prepare(`
+          UPDATE character_titles 
+          SET is_active = 1 
+          WHERE character_id = ? AND title = ?
+        `);
+        activateTitleStmt.run(submission.character_id, submission.title_reward);
+      }
+      
+      // Equipment vergeben falls vorhanden
+      if (submission.equipment_reward_id) {
+        const equipStmt = db.prepare(`
+          INSERT OR IGNORE INTO character_equipment (character_id, equipment_id, equipped)
+          VALUES (?, ?, 0)
+        `);
+        equipStmt.run(submission.character_id, submission.equipment_reward_id);
+      }
+    }
+    
+    res.json({ message: 'Abgabe erfolgreich bewertet' });
+  } catch (error) {
+    console.error('Fehler beim Bewerten der Abgabe:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });

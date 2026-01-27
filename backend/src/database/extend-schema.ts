@@ -37,6 +37,28 @@ const addNewColumns = () => {
       }
     }
     
+    // Quests Tabelle: Spalten für Wiederholungen hinzufügen
+    const repeatColumns = [
+      { name: 'is_repeatable', type: 'INTEGER DEFAULT 0' },
+      { name: 'repeat_interval', type: 'TEXT' },
+      { name: 'due_date', type: 'TEXT' },
+      { name: 'repeat_time', type: 'TEXT' },
+      { name: 'repeat_day_of_week', type: 'INTEGER' },
+      { name: 'repeat_day_of_month', type: 'INTEGER' }
+    ];
+    
+    for (const col of repeatColumns) {
+      try {
+        db.exec(`ALTER TABLE quests ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`✅ quests.${col.name} hinzugefügt`);
+      } catch (e: any) {
+        if (!e.message.includes('duplicate column name')) {
+          throw e;
+        }
+        console.log(`⏭️  quests.${col.name} existiert bereits`);
+      }
+    }
+    
     // Character_quests Tabelle: neue Spalten hinzufügen
     const characterQuestColumns = [
       { name: 'submission_text', type: 'TEXT' },
@@ -45,7 +67,8 @@ const addNewColumns = () => {
       { name: 'grade', type: 'TEXT' },
       { name: 'feedback', type: 'TEXT' },
       { name: 'graded_at', type: 'TEXT' },
-      { name: 'graded_by_user_id', type: 'INTEGER' }
+      { name: 'graded_by_user_id', type: 'INTEGER' },
+      { name: 'last_completed_at', type: 'TEXT' }
     ];
     
     for (const col of characterQuestColumns) {

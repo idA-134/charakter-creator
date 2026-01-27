@@ -136,6 +136,20 @@ const seedData = () => {
       securityQuestStmt.run(...quest);
     }
 
+    // Wiederholbare Quests (z.B. wöchentliche Aufgaben)
+    const repeatableQuestStmt = db.prepare(`
+      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, min_level, is_repeatable, repeat_interval)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const repeatableQuests = [
+      ['Berichtsheft', 'Fülle das wöchentliche Berichtsheft aus und dokumentiere deine Lernfortschritte', 'dokumentation', 'beginner', 500, 1, 1, 'weekly']
+    ];
+
+    for (const quest of repeatableQuests) {
+      repeatableQuestStmt.run(...quest);
+    }
+
     console.log('✅ Quests erfolgreich angelegt!');
     console.log('✅ Alle Beispieldaten erfolgreich eingefügt!');
   } catch (error) {

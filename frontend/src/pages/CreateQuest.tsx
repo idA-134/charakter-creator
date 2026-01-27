@@ -12,6 +12,8 @@ export default function CreateQuest() {
     description: '',
     category: 'Programmierung',
     difficulty: 'easy',
+    xp_scaling: 'scaled',
+    xp_reward: 0,
     programmierung_reward: 0,
     netzwerke_reward: 0,
     datenbanken_reward: 0,
@@ -22,7 +24,13 @@ export default function CreateQuest() {
     title_reward: '',
     equipment_reward_id: '',
     required_equipment_id: '',
-    min_level: 1
+    min_level: 1,
+    is_repeatable: false,
+    repeat_interval: 'weekly',
+    due_date: '',
+    repeat_time: '12:00',
+    repeat_day_of_week: 1,
+    repeat_day_of_month: 1
   });
 
   useEffect(() => {
@@ -46,6 +54,8 @@ export default function CreateQuest() {
         ...formData,
         equipment_reward_id: formData.equipment_reward_id || null,
         required_equipment_id: formData.required_equipment_id || null,
+        repeat_interval: formData.is_repeatable ? formData.repeat_interval : null,
+        due_date: formData.due_date || null,
         created_by_user_id: user.id
       });
       
@@ -123,6 +133,164 @@ export default function CreateQuest() {
               onChange={(e) => setFormData({ ...formData, min_level: parseInt(e.target.value) })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2"
             />
+          </div>
+        </div>
+        
+        {/* XP-Skalierung */}
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">⚡ XP-Vergabe</h3>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="xp_scaling"
+                  value="scaled"
+                  checked={formData.xp_scaling === 'scaled'}
+                  onChange={(e) => setFormData({ ...formData, xp_scaling: e.target.value })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Skalierend (automatisch basierend auf Level & Schwierigkeit)
+                </span>
+              </label>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="xp_scaling"
+                  value="fixed"
+                  checked={formData.xp_scaling === 'fixed'}
+                  onChange={(e) => setFormData({ ...formData, xp_scaling: e.target.value })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium text-gray-700">Fester XP-Wert</span>
+              </label>
+              {formData.xp_scaling === 'fixed' && (
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="XP-Wert"
+                  value={formData.xp_reward || ''}
+                  onChange={(e) => setFormData({ ...formData, xp_reward: parseInt(e.target.value) || 0 })}
+                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2"
+                  required
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Wiederholbarkeit */}
+        <div className="bg-green-50 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">🔄 Wiederholbarkeit</h3>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-4">
+              <input
+                type="checkbox"
+                id="is_repeatable"
+                checked={formData.is_repeatable}
+                onChange={(e) => setFormData({ ...formData, is_repeatable: e.target.checked })}
+                className="w-4 h-4"
+              />
+              <label htmlFor="is_repeatable" className="text-sm font-medium text-gray-700">
+                Quest ist wiederholbar
+              </label>
+            </div>
+            
+            {formData.is_repeatable && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Wiederholungsintervall
+                  </label>
+                  <select
+                    value={formData.repeat_interval}
+                    onChange={(e) => setFormData({ ...formData, repeat_interval: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                  >
+                    <option value="daily">Täglich</option>
+                    <option value="weekly">Wöchentlich</option>
+                    <option value="monthly">Monatlich</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Uhrzeit der Wiederholung
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.repeat_time}
+                    onChange={(e) => setFormData({ ...formData, repeat_time: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                    required
+                  />
+                </div>
+                
+                {formData.repeat_interval === 'weekly' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Wochentag
+                    </label>
+                    <select
+                      value={formData.repeat_day_of_week}
+                      onChange={(e) => setFormData({ ...formData, repeat_day_of_week: parseInt(e.target.value) })}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                    >
+                      <option value="0">Sonntag</option>
+                      <option value="1">Montag</option>
+                      <option value="2">Dienstag</option>
+                      <option value="3">Mittwoch</option>
+                      <option value="4">Donnerstag</option>
+                      <option value="5">Freitag</option>
+                      <option value="6">Samstag</option>
+                    </select>
+                  </div>
+                )}
+                
+                {formData.repeat_interval === 'monthly' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tag des Monats (1-31)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={formData.repeat_day_of_month}
+                      onChange={(e) => setFormData({ ...formData, repeat_day_of_month: parseInt(e.target.value) })}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Bei Monaten mit weniger Tagen wird der letzte Tag des Monats verwendet
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Abgabefrist */}
+        <div className="bg-yellow-50 p-4 rounded-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">📅 Abgabefrist</h3>
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Frist für Abgabe (optional)
+            </label>
+            <input
+              type="datetime-local"
+              value={formData.due_date}
+              onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-4 py-2"
+            />
+            <p className="text-sm text-gray-500">
+              Nach dieser Zeit können keine Abgaben mehr eingereicht werden
+            </p>
           </div>
         </div>
         

@@ -82,6 +82,15 @@ export interface Quest {
   submission_file_url?: string;
   grade?: 'excellent' | 'good' | 'satisfactory' | 'sufficient' | 'insufficient';
   feedback?: string;
+  
+  // Wiederholbarkeit
+  is_repeatable?: boolean;
+  repeat_interval?: 'daily' | 'weekly' | 'monthly';
+  repeat_time?: string;
+  repeat_day_of_week?: number;
+  repeat_day_of_month?: number;
+  due_date?: string;
+  xp_scaling?: 'fixed' | 'scaled';
 }
 
 export interface User {

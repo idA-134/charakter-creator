@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { questAPI, characterAPI, api } from '../services/api';
+import { questAPI, characterAPI, api } from '../services/api'; 
 import { Quest, Character } from '../types';
 
 export default function Quests() {
@@ -42,17 +42,6 @@ export default function Quests() {
       } else {
         alert(errorMsg);
       }
-    }
-  };
-
-  const handleCompleteQuest = async (questId: number) => {
-    try {
-      await questAPI.complete(questId, Number(characterId));
-      loadData();
-    } catch (error: any) {
-      console.error('Fehler beim Abschlie\u00dfen der Quest:', error);
-      const errorMsg = error.response?.data?.error || 'Fehler beim Abschlie\u00dfen der Quest';
-      alert(errorMsg);
     }
   };
 
@@ -119,7 +108,6 @@ export default function Quests() {
             key={quest.id} 
             quest={quest}
             onStart={handleStartQuest}
-            onComplete={handleCompleteQuest}
             onReload={loadData}
           />
         ))}
@@ -150,7 +138,7 @@ function FilterButton({ active, onClick, children }: any) {
   );
 }
 
-function QuestCard({ quest, onStart, onComplete, onReload }: any) {
+function QuestCard({ quest, onStart, onReload }: any) {
   const { characterId } = useParams<{ characterId: string }>();
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
@@ -171,6 +159,47 @@ function QuestCard({ quest, onStart, onComplete, onReload }: any) {
     in_progress: 'bg-purple-100 text-purple-800',
     submitted: 'bg-orange-100 text-orange-800',
     completed: 'bg-green-100 text-green-800',
+  };
+  
+  const calculateNextRepeatDate = (): Date | null => {
+    if (!quest.is_repeatable || !quest.repeat_interval || !quest.repeat_time) {
+      return null;
+    }
+
+    const [hours, minutes] = quest.repeat_time.split(':').map(Number);
+    const now = new Date();
+    let nextDate = new Date(now);
+    nextDate.setHours(hours, minutes, 0, 0);
+
+    if (quest.repeat_interval === 'daily') {
+      if (nextDate <= now) {
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
+    } else if (quest.repeat_interval === 'weekly') {
+      const targetDay = quest.repeat_day_of_week || 1;
+      const currentDay = nextDate.getDay();
+      let daysToAdd = targetDay - currentDay;
+      
+      if (daysToAdd < 0 || (daysToAdd === 0 && nextDate <= now)) {
+        daysToAdd += 7;
+      }
+      nextDate.setDate(nextDate.getDate() + daysToAdd);
+    } else if (quest.repeat_interval === 'monthly') {
+      const targetDay = quest.repeat_day_of_month || 1;
+      const currentDay = nextDate.getDate();
+      
+      if (currentDay > targetDay || (currentDay === targetDay && nextDate <= now)) {
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      }
+      
+      nextDate.setDate(targetDay);
+      const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+      if (targetDay > lastDayOfMonth) {
+        nextDate.setDate(lastDayOfMonth);
+      }
+    }
+
+    return nextDate;
   };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,7 +282,7 @@ function QuestCard({ quest, onStart, onComplete, onReload }: any) {
       <div className="border-t pt-4 mb-4">
         <div className="text-sm font-bold text-gray-700 mb-2">🎁 Belohnungen:</div>
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>⭐ {quest.xp_reward} XP</div>
+          {quest.xp_reward > 0 && <div>⭐ {quest.xp_reward} XP</div>}
           {quest.programmierung_reward > 0 && <div>💻 +{quest.programmierung_reward} Prog.</div>}
           {quest.netzwerke_reward > 0 && <div>🌐 +{quest.netzwerke_reward} Netzw.</div>}
           {quest.datenbanken_reward > 0 && <div>🗄️ +{quest.datenbanken_reward} DB</div>}
@@ -262,6 +291,43 @@ function QuestCard({ quest, onStart, onComplete, onReload }: any) {
           {quest.projektmanagement_reward > 0 && <div>📊 +{quest.projektmanagement_reward} PM</div>}
         </div>
       </div>
+      
+      {quest.due_date && (
+        <div className="border-t pt-4 mb-4">
+          <div className="text-sm font-bold text-gray-700 mb-2">📅 Abgabefrist:</div>
+          <div className="bg-yellow-50 p-3 rounded-lg">
+            <p className="text-sm text-yellow-800 font-semibold">
+              {new Date(quest.due_date).toLocaleDateString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {quest.is_repeatable && quest.repeat_interval && calculateNextRepeatDate() && (
+        <div className="border-t pt-4 mb-4">
+          <div className="text-sm font-bold text-gray-700 mb-2">🔄 Nächste Wiederholung:</div>
+          <div className="bg-blue-50 p-3 rounded-lg">
+            <p className="text-sm text-blue-800 font-semibold">
+              {calculateNextRepeatDate()!.toLocaleDateString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Wiederholungsintervall: {String(quest.repeat_interval).toUpperCase()}
+            </p>
+          </div>
+        </div>
+      )}
       
       {quest.status === 'submitted' && quest.grade && (
         <div className="border-t pt-4 mb-4">

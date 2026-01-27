@@ -127,6 +127,13 @@ const createTables = () => {
         prerequisite_quest_id INTEGER,
         created_by_user_id INTEGER,
         
+        is_repeatable INTEGER DEFAULT 0,
+        repeat_interval TEXT,
+        due_date TEXT,
+        repeat_time TEXT,
+        repeat_day_of_week INTEGER,
+        repeat_day_of_month INTEGER,
+        
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (prerequisite_quest_id) REFERENCES quests(id) ON DELETE SET NULL,
         FOREIGN KEY (equipment_reward_id) REFERENCES equipment(id) ON DELETE SET NULL,
@@ -150,6 +157,7 @@ const createTables = () => {
         feedback TEXT,
         graded_at TEXT,
         graded_by_user_id INTEGER,
+        last_completed_at TEXT,
         FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
         FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE,
         FOREIGN KEY (graded_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
