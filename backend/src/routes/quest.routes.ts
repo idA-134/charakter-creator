@@ -5,6 +5,28 @@ import { upload, getRelativePath, getAbsolutePath } from '../middleware/upload';
 import path from 'path';
 import fs from 'fs';
 
+// Hilfsfunktion: Prüfe ob eine wiederholbare Quest erneut gestartet werden kann
+function canRepeatQuest(lastCompletedAt: string | null, repeatInterval: string | null): boolean {
+  if (!lastCompletedAt || !repeatInterval) {
+    return true;
+  }
+  
+  const lastCompleted = new Date(lastCompletedAt);
+  const now = new Date();
+  
+  if (repeatInterval === 'weekly') {
+    const weekInMilliseconds = 7 * 24 * 60 * 60 * 1000;
+    return (now.getTime() - lastCompleted.getTime()) >= weekInMilliseconds;
+  }
+  
+  if (repeatInterval === 'daily') {
+    const dayInMilliseconds = 24 * 60 * 60 * 1000;
+    return (now.getTime() - lastCompleted.getTime()) >= dayInMilliseconds;
+  }
+  
+  return true;
+}
+
 export const questRouter = Router();
 
 // Alle verfügbaren Quests abrufen
@@ -94,7 +116,7 @@ questRouter.post('/:questId/start', async (req, res) => {
     }
     
     // Quest abrufen und Equipment-Requirement prüfen
-    const questStmt = db.prepare('SELECT required_equipment_id FROM quests WHERE id = ?');
+    const questStmt = db.prepare('SELECT * FROM quests WHERE id = ?');
     const quest: any = questStmt.get(questId);
     
     if (!quest) {
@@ -115,6 +137,25 @@ questRouter.post('/:questId/start', async (req, res) => {
           error: 'Benötigtes Equipment fehlt',
           required_equipment: equipmentName?.name 
         });
+      }
+    }
+    
+    // Für wiederholbare Quests: Prüfe ob Wiederholung möglich ist
+    if (quest.is_repeatable) {
+      const existingQuest: any = db.prepare(
+        'SELECT status, last_completed_at FROM character_quests WHERE character_id = ? AND quest_id = ?'
+      ).get(characterId, questId);
+      
+      if (existingQuest && existingQuest.status === 'completed') {
+        if (!canRepeatQuest(existingQuest.last_completed_at, quest.repeat_interval)) {
+          const lastCompleted = new Date(existingQuest.last_completed_at);
+          const nextAvailable = new Date(lastCompleted.getTime() + (quest.repeat_interval === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
+          return res.status(403).json({ 
+            error: 'Diese Quest kann noch nicht wiederholt werden',
+            next_available: nextAvailable.toISOString(),
+            repeat_interval: quest.repeat_interval
+          });
+        }
       }
     }
     
@@ -146,6 +187,20 @@ questRouter.post('/:questId/submit', upload.single('file'), async (req, res) => 
     
     if (!characterId) {
       return res.status(400).json({ error: 'characterId erforderlich' });
+    }
+    
+    // Prüfe Abgabefrist
+    const quest: any = db.prepare('SELECT due_date, title FROM quests WHERE id = ?').get(questId);
+    if (quest && quest.due_date) {
+      const dueDate = new Date(quest.due_date);
+      const now = new Date();
+      if (now > dueDate) {
+        return res.status(403).json({ 
+          error: 'Abgabefrist überschritten',
+          due_date: quest.due_date,
+          quest_title: quest.title
+        });
+      }
     }
     
     // Mindestens Text oder Datei muss vorhanden sein
@@ -225,7 +280,7 @@ questRouter.post('/:questId/complete', async (req, res) => {
       // Quest als abgeschlossen markieren
       const updateQuestStmt = db.prepare(
         `UPDATE character_quests
-         SET status = 'completed', completed_at = datetime('now')
+         SET status = 'completed', completed_at = datetime('now'), last_completed_at = datetime('now')
          WHERE character_id = ? AND quest_id = ?`
       );
       updateQuestStmt.run(characterId, questId);

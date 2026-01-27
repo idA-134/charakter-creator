@@ -53,6 +53,7 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       category,
       difficulty,
       xp_reward,
+      xp_scaling, // 'fixed' oder 'scaled' - neu!
       programmierung_reward,
       netzwerke_reward,
       datenbanken_reward,
@@ -65,22 +66,69 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       required_equipment_id,
       min_level,
       prerequisite_quest_id,
-      created_by_user_id
+      created_by_user_id,
+      is_repeatable, // neu!
+      repeat_interval, // neu! - 'daily', 'weekly', etc.
+      due_date, // neu! - Abgabefrist
+      repeat_time, // neu! - Uhrzeit für Wiederholung (HH:MM)
+      repeat_day_of_week, // neu! - Wochentag für wöchentliche Wiederholung (0-6)
+      repeat_day_of_month // neu! - Tag des Monats für monatliche Wiederholung (1-31)
     } = req.body;
     
     if (!title || !description || !created_by_user_id) {
       return res.status(400).json({ error: 'Title, Description und created_by_user_id sind erforderlich' });
     }
     
-    // Basis-XP basierend auf Schwierigkeit
-    let baseXP = 50;
-    if (difficulty === 'easy') baseXP = 50;
-    else if (difficulty === 'medium') baseXP = 100;
-    else if (difficulty === 'hard') baseXP = 200;
+    // Validiere xp_scaling
+    const scalingMode = xp_scaling || 'scaled'; // default: scaled
+    if (!['fixed', 'scaled'].includes(scalingMode)) {
+      return res.status(400).json({ error: 'xp_scaling muss "fixed" oder "scaled" sein' });
+    }
     
-    // Skaliere XP basierend auf Mindestlevel (falls nicht manuell gesetzt)
+    // Validiere repeat_interval falls is_repeatable true ist
+    if (is_repeatable) {
+      const validIntervals = ['daily', 'weekly', 'monthly'];
+      if (!repeat_interval || !validIntervals.includes(repeat_interval)) {
+        return res.status(400).json({ error: 'repeat_interval muss "daily", "weekly" oder "monthly" sein' });
+      }
+      
+      // Validiere repeat_time (muss im Format HH:MM sein)
+      if (!repeat_time || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(repeat_time)) {
+        return res.status(400).json({ error: 'repeat_time muss im Format HH:MM sein (z.B. 14:30)' });
+      }
+      
+      // Validiere je nach Intervall
+      if (repeat_interval === 'weekly') {
+        if (repeat_day_of_week === undefined || repeat_day_of_week < 0 || repeat_day_of_week > 6) {
+          return res.status(400).json({ error: 'repeat_day_of_week muss zwischen 0 (Sonntag) und 6 (Samstag) sein' });
+        }
+      }
+      
+      if (repeat_interval === 'monthly') {
+        if (repeat_day_of_month === undefined || repeat_day_of_month < 1 || repeat_day_of_month > 31) {
+          return res.status(400).json({ error: 'repeat_day_of_month muss zwischen 1 und 31 sein' });
+        }
+      }
+    }
+    
     const questMinLevel = min_level || 1;
-    const presetXP = xp_reward || calculateScaledXP(baseXP, questMinLevel);
+    let finalXP = 0;
+    
+    if (scalingMode === 'fixed') {
+      // Fester XP-Wert - muss vom Benutzer gesetzt sein
+      if (!xp_reward) {
+        return res.status(400).json({ error: 'Bei festem XP-Wert muss xp_reward gesetzt sein' });
+      }
+      finalXP = xp_reward;
+    } else {
+      // Skalierter XP-Wert basierend auf Schwierigkeit und Level
+      let baseXP = 50;
+      if (difficulty === 'easy') baseXP = 50;
+      else if (difficulty === 'medium') baseXP = 100;
+      else if (difficulty === 'hard') baseXP = 200;
+      
+      finalXP = xp_reward || calculateScaledXP(baseXP, questMinLevel);
+    }
     
     const stmt = db.prepare(`
       INSERT INTO quests (
@@ -88,17 +136,21 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
         programmierung_reward, netzwerke_reward, datenbanken_reward,
         hardware_reward, sicherheit_reward, projektmanagement_reward,
         is_title_quest, title_reward, equipment_reward_id, required_equipment_id,
-        min_level, prerequisite_quest_id, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        min_level, prerequisite_quest_id, created_by_user_id,
+        is_repeatable, repeat_interval, due_date,
+        repeat_time, repeat_day_of_week, repeat_day_of_month
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const info = stmt.run(
-      title, description, category, difficulty, presetXP,
+      title, description, category, difficulty, finalXP,
       programmierung_reward || 0, netzwerke_reward || 0, datenbanken_reward || 0,
       hardware_reward || 0, sicherheit_reward || 0, projektmanagement_reward || 0,
       is_title_quest ? 1 : 0, title_reward || null, 
       equipment_reward_id || null, required_equipment_id || null,
-      questMinLevel, prerequisite_quest_id || null, created_by_user_id
+      questMinLevel, prerequisite_quest_id || null, created_by_user_id,
+      is_repeatable ? 1 : 0, repeat_interval || null, due_date || null,
+      repeat_time || null, repeat_day_of_week ?? null, repeat_day_of_month ?? null
     );
     
     const newQuest = db.prepare('SELECT * FROM quests WHERE id = ?').get(info.lastInsertRowid);
@@ -188,10 +240,23 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
   }
 });
 
-// Alle Abgaben für eine Quest abrufen
+// Alle Abgaben für eine Quest abrufen (nur Dozent der Quest oder Admin)
 dozentRouter.get('/quests/:questId/submissions', requireDozent, async (req, res) => {
   try {
     const { questId } = req.params;
+    const user_id = req.query.user_id; // user_id des anfragenden Dozenten aus Query-Parameter
+    
+    // Quest-Creator abrufen
+    const quest: any = db.prepare('SELECT created_by_user_id FROM quests WHERE id = ?').get(questId);
+    if (!quest) {
+      return res.status(404).json({ error: 'Quest nicht gefunden' });
+    }
+    
+    // Prüfe ob Anfragender der Creator ist (falls user_id übergeben wurde)
+    if (user_id && parseInt(user_id as string) !== quest.created_by_user_id) {
+      // Optional: Hier könnten wir prüfen ob der User Admin ist
+      return res.status(403).json({ error: 'Nur der Dozent der Quest kann die Abgaben sehen' });
+    }
     
     const submissions = db.prepare(`
       SELECT cq.*, c.name as character_name, c.level,
@@ -210,7 +275,7 @@ dozentRouter.get('/quests/:questId/submissions', requireDozent, async (req, res)
   }
 });
 
-// Abgabe bewerten
+// Abgabe bewerten (nur Dozent der Quest)
 dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req, res) => {
   try {
     const { submissionId } = req.params;
@@ -228,6 +293,23 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
     // Bei rejected muss feedback vorhanden sein
     if (grade === 'rejected' && !feedback) {
       return res.status(400).json({ error: 'Bei Ablehnung ist eine Begründung erforderlich' });
+    }
+    
+    // Quest-Info mit Creator abrufen
+    const submissionData: any = db.prepare(`
+      SELECT cq.*, q.created_by_user_id
+      FROM character_quests cq
+      JOIN quests q ON cq.quest_id = q.id
+      WHERE cq.id = ?
+    `).get(submissionId);
+    
+    if (!submissionData) {
+      return res.status(404).json({ error: 'Abgabe nicht gefunden' });
+    }
+    
+    // Prüfe ob graded_by_user_id der Creator der Quest ist
+    if (graded_by_user_id !== submissionData.created_by_user_id) {
+      return res.status(403).json({ error: 'Nur der Dozent der Quest kann diese Abgabe bewerten' });
     }
     
     // Abgabe als bewertet markieren

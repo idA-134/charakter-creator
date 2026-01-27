@@ -344,9 +344,8 @@ node dist/database/setup-admin.js
 Das Script fragt interaktiv nach:
 
 1. **Benutzername:** z.B. "admin" oder "max_mustermann"
-2. **E-Mail:** z.B. "admin@schule.de"
-3. **Passwort:** Ein sicheres Passwort
-4. **Passwort bestätigen:** Nochmal eingeben
+2. **Passwort:** Ein sicheres Passwort
+3. **Passwort bestätigen:** Nochmal eingeben
 
 **Was ist ein Super-Admin?**
 

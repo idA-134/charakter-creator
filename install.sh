@@ -298,7 +298,7 @@ fi
 echo ""
 echo "╔════════════════════════════════════════════════╗"
 echo "║                                                ║"
-echo "║     ⚔️  QUEST ERFOLGREICH ABGESCHLOSSEN! ⚔️    ║"
+echo "║     ⚔️  QUEST ERFOLGREICH ABGESCHLOSSEN! ⚔️   ║"
 echo "║                                                ║"
 echo "╚════════════════════════════════════════════════╝"
 echo "📊 Status der Wächter:"
@@ -310,7 +310,7 @@ echo ""
 
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo "╔════════════════════════════════════════════════╗"
-echo "║              🌐 DAS PORTAL IST OFFEN            ║"
+echo "║              🌐 DAS PORTAL IST OFFEN           ║"
 echo "╚════════════════════════════════════════════════╝"
 echo ""
 echo -e "${GREEN}🎮 Deine Akademie ist erreichbar unter:${NC}"
