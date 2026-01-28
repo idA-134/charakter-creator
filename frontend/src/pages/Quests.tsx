@@ -159,6 +159,7 @@ function QuestCard({ quest, onStart, onReload }: any) {
     in_progress: 'bg-purple-100 text-purple-800',
     submitted: 'bg-orange-100 text-orange-800',
     completed: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
   };
   
   const calculateNextRepeatDate = (): Date | null => {
@@ -166,36 +167,61 @@ function QuestCard({ quest, onStart, onReload }: any) {
       return null;
     }
 
+    // Wenn Quest completed/failed ist, basieren wir auf completed_at
+    const baseDate = (quest.status === 'completed' || quest.status === 'failed') && quest.completed_at 
+      ? new Date(quest.completed_at)
+      : new Date();
+
     const [hours, minutes] = quest.repeat_time.split(':').map(Number);
-    const now = new Date();
-    let nextDate = new Date(now);
+    let nextDate = new Date(baseDate);
     nextDate.setHours(hours, minutes, 0, 0);
 
     if (quest.repeat_interval === 'daily') {
-      if (nextDate <= now) {
+      // Wenn die Quest completed/failed ist, addiere 1 Tag zum completed_at
+      if ((quest.status === 'completed' || quest.status === 'failed') && quest.completed_at) {
+        nextDate.setDate(nextDate.getDate() + 1);
+      } else if (nextDate <= new Date()) {
         nextDate.setDate(nextDate.getDate() + 1);
       }
     } else if (quest.repeat_interval === 'weekly') {
       const targetDay = quest.repeat_day_of_week || 1;
-      const currentDay = nextDate.getDay();
-      let daysToAdd = targetDay - currentDay;
       
-      if (daysToAdd < 0 || (daysToAdd === 0 && nextDate <= now)) {
-        daysToAdd += 7;
+      if ((quest.status === 'completed' || quest.status === 'failed') && quest.completed_at) {
+        // Nächster Wochentag nach completion
+        const currentDay = nextDate.getDay();
+        let daysToAdd = targetDay - currentDay;
+        if (daysToAdd <= 0) {
+          daysToAdd += 7;
+        }
+        nextDate.setDate(nextDate.getDate() + daysToAdd);
+      } else {
+        // Nächster Wochentag generell
+        const currentDay = nextDate.getDay();
+        let daysToAdd = targetDay - currentDay;
+        
+        if (daysToAdd < 0 || (daysToAdd === 0 && nextDate <= new Date())) {
+          daysToAdd += 7;
+        }
+        nextDate.setDate(nextDate.getDate() + daysToAdd);
       }
-      nextDate.setDate(nextDate.getDate() + daysToAdd);
     } else if (quest.repeat_interval === 'monthly') {
       const targetDay = quest.repeat_day_of_month || 1;
-      const currentDay = nextDate.getDate();
       
-      if (currentDay > targetDay || (currentDay === targetDay && nextDate <= now)) {
+      if ((quest.status === 'completed' || quest.status === 'failed') && quest.completed_at) {
+        // Nächster Monat nach completion
         nextDate.setMonth(nextDate.getMonth() + 1);
-      }
-      
-      nextDate.setDate(targetDay);
-      const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-      if (targetDay > lastDayOfMonth) {
-        nextDate.setDate(lastDayOfMonth);
+        const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+        nextDate.setDate(Math.min(targetDay, lastDayOfMonth));
+      } else {
+        // Nächster Monat generell
+        const currentDay = nextDate.getDate();
+        
+        if (currentDay > targetDay || (currentDay === targetDay && nextDate <= new Date())) {
+          nextDate.setMonth(nextDate.getMonth() + 1);
+        }
+        
+        const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+        nextDate.setDate(Math.min(targetDay, lastDayOfMonth));
       }
     }
 
@@ -252,6 +278,7 @@ function QuestCard({ quest, onStart, onReload }: any) {
     if (quest.status === 'in_progress') return 'In Bearbeitung';
     if (quest.status === 'submitted') return 'Eingereicht';
     if (quest.status === 'completed') return 'Abgeschlossen';
+    if (quest.status === 'failed') return 'Nicht bestanden';
     return 'Verfügbar';
   };
 
@@ -309,37 +336,57 @@ function QuestCard({ quest, onStart, onReload }: any) {
         </div>
       )}
       
-      {quest.is_repeatable && quest.repeat_interval && calculateNextRepeatDate() && (
+      {(quest.is_repeatable && quest.repeat_interval) && (
         <div className="border-t pt-4 mb-4">
-          <div className="text-sm font-bold text-gray-700 mb-2">🔄 Nächste Wiederholung:</div>
+          <div className="text-sm font-bold text-gray-700 mb-2">🔄 Wiederholbare Quest</div>
           <div className="bg-blue-50 p-3 rounded-lg">
-            <p className="text-sm text-blue-800 font-semibold">
-              {calculateNextRepeatDate()!.toLocaleDateString('de-DE', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+            <p className="text-sm text-blue-800">
+              Wiederholungsintervall: <span className="font-semibold">{String(quest.repeat_interval).toUpperCase()}</span>
             </p>
-            <p className="text-xs text-blue-600 mt-1">
-              Wiederholungsintervall: {String(quest.repeat_interval).toUpperCase()}
-            </p>
+            {((quest.status === 'completed' || quest.status === 'failed') && calculateNextRepeatDate()) && (
+              <p className="text-sm text-blue-800 mt-2">
+                ⏰ Nächste Verfügbarkeit: <span className="font-semibold">
+                  {calculateNextRepeatDate()!.toLocaleDateString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
+              </p>
+            )}
           </div>
         </div>
       )}
       
-      {quest.status === 'submitted' && quest.grade && (
+      {(quest.status === 'failed') && (
+        <div className="border-t pt-4 mb-4">
+          <div className="text-sm font-bold text-red-700 mb-2">❌ Nicht bestanden</div>
+          <div className="bg-red-50 p-3 rounded-lg">
+            <p className="text-sm text-red-800">
+              Die Abgabefrist wurde überschritten. Diese Quest wurde ohne XP geschlossen.
+            </p>
+            {quest.is_repeatable ? (
+              <p className="text-sm text-red-800 mt-2">
+                Du kannst diese Quest beim nächsten Wiederholungszeitpunkt erneut versuchen.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
+      
+      {(quest.status === 'submitted' && quest.grade) && (
         <div className="border-t pt-4 mb-4">
           <div className="text-sm font-bold text-gray-700 mb-2">✅ Bewertung:</div>
           <div className="bg-green-50 p-3 rounded-lg">
             <p className="text-sm font-semibold text-green-800 capitalize">{quest.grade}</p>
-            {quest.feedback && <p className="text-sm text-gray-600 mt-2">{quest.feedback}</p>}
+            {quest.feedback ? <p className="text-sm text-gray-600 mt-2">{quest.feedback}</p> : null}
           </div>
         </div>
       )}
       
-      {showSubmitForm && quest.status === 'in_progress' && (
+      {(showSubmitForm && quest.status === 'in_progress') && (
         <div className="border-t pt-4 mb-4">
           <div className="text-sm font-bold text-gray-700 mb-2">📝 Abgabe einreichen:</div>
           <textarea
@@ -359,11 +406,11 @@ function QuestCard({ quest, onStart, onReload }: any) {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.7z,.jpg,.jpeg,.png,.gif,.webp,.txt,.html,.css,.js,.json,.xml,.mp4,.webm"
             />
-            {submissionFile && (
+            {submissionFile ? (
               <p className="text-xs text-gray-600 mt-1">
                 Ausgewählt: {submissionFile.name} ({(submissionFile.size / 1024 / 1024).toFixed(2)} MB)
               </p>
-            )}
+            ) : null}
           </div>
           <div className="flex gap-2">
             <button
@@ -399,7 +446,7 @@ function QuestCard({ quest, onStart, onReload }: any) {
             Quest starten
           </button>
         ) : null}
-        {quest.status === 'in_progress' && !showSubmitForm && (
+        {(quest.status === 'in_progress' && !showSubmitForm) && (
           <button
             onClick={() => setShowSubmitForm(true)}
             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
@@ -407,15 +454,31 @@ function QuestCard({ quest, onStart, onReload }: any) {
             Lösung einreichen
           </button>
         )}
-        {quest.status === 'submitted' && !quest.grade && (
+        {(quest.status === 'submitted' && !quest.grade) && (
           <div className="flex-1 bg-orange-200 text-orange-800 font-bold py-2 px-4 rounded-lg text-center">
             ⏳ Wartet auf Bewertung
           </div>
         )}
-        {quest.status === 'completed' || (quest.status === 'submitted' && quest.grade) && (
-          <div className="flex-1 bg-gray-200 text-gray-600 font-bold py-2 px-4 rounded-lg text-center">
-            ✓ Abgeschlossen
-          </div>
+        {(quest.status === 'completed' || (quest.status === 'submitted' && quest.grade) || quest.status === 'failed') && (
+          <>
+            {quest.is_repeatable && quest.status !== 'failed' ? (
+              <div className="flex-1 bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded-lg text-center">
+                🔄 Wiederholbar
+              </div>
+            ) : quest.status === 'failed' && quest.is_repeatable ? (
+              <div className="flex-1 bg-red-200 text-red-800 font-bold py-2 px-4 rounded-lg text-center">
+                ❌ Nicht bestanden - Wiederholbar
+              </div>
+            ) : quest.status === 'failed' ? (
+              <div className="flex-1 bg-red-200 text-red-800 font-bold py-2 px-4 rounded-lg text-center">
+                ❌ Nicht bestanden
+              </div>
+            ) : (
+              <div className="flex-1 bg-gray-200 text-gray-600 font-bold py-2 px-4 rounded-lg text-center">
+                ✓ Abgeschlossen
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

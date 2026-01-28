@@ -8,7 +8,7 @@ export const authRouter = Router();
 // Registrierung
 authRouter.post('/register', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, role } = req.body;
     
     if (!username || !password) {
       return res.status(400).json({ error: 'Username und Passwort sind erforderlich' });
@@ -18,17 +18,23 @@ authRouter.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Passwort muss mindestens 6 Zeichen lang sein' });
     }
     
+    // Rolle validieren (nur nachwuchskraft oder dozent erlaubt)
+    const userRole = role && ['nachwuchskraft', 'dozent'].includes(role) ? role : 'nachwuchskraft';
+    
     // Passwort hashen
     const password_hash = await bcrypt.hash(password, 10);
     
     const stmt = db.prepare(`
-      INSERT INTO users (username, password_hash, is_admin, is_super_admin)
-      VALUES (?, ?, 0, 0)
+      INSERT INTO users (username, password_hash, role, is_admin, is_super_admin, pending_approval)
+      VALUES (?, ?, ?, 0, 0, ?)
     `);
     
-    const result = stmt.run(username, password_hash);
+    // Dozenten benötigen Bestätigung, NWK nicht
+    const pendingApproval = userRole === 'dozent' ? 1 : 0;
     
-    const user = db.prepare('SELECT id, username, is_admin, is_super_admin, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const result = stmt.run(username, password_hash, userRole, pendingApproval);
+    
+    const user = db.prepare('SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     
     res.status(201).json(user);
   } catch (error: any) {
@@ -61,12 +67,17 @@ authRouter.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
     
+    // Wenn Dozent wartet auf Bestätigung, behandle ihn als NWK
+    const actualRole = (user.role === 'dozent' && user.pending_approval === 1) 
+      ? 'nachwuchskraft' 
+      : (user.role || 'nachwuchskraft');
+    
     // JWT Token erstellen
     const token = jwt.sign(
       { 
         userId: user.id, 
         username: user.username,
-        role: user.role || 'nachwuchskraft',
+        role: actualRole,
         isAdmin: user.is_admin === 1,
         isSuperAdmin: user.is_super_admin === 1
       },
@@ -79,7 +90,7 @@ authRouter.post('/login', async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        role: user.role || 'nachwuchskraft',
+        role: actualRole,
         isAdmin: user.is_admin === 1,
         isSuperAdmin: user.is_super_admin === 1
       }

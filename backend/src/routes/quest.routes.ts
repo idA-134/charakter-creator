@@ -6,22 +6,54 @@ import path from 'path';
 import fs from 'fs';
 
 // Hilfsfunktion: Prüfe ob eine wiederholbare Quest erneut gestartet werden kann
-function canRepeatQuest(lastCompletedAt: string | null, repeatInterval: string | null): boolean {
-  if (!lastCompletedAt || !repeatInterval) {
+function canRepeatQuest(lastCompletedAt: string | null, repeatInterval: string | null, repeatTime: string | null, repeatDayOfWeek: number | null, repeatDayOfMonth: number | null): boolean {
+  if (!lastCompletedAt || !repeatInterval || !repeatTime) {
     return true;
   }
   
   const lastCompleted = new Date(lastCompletedAt);
   const now = new Date();
   
-  if (repeatInterval === 'weekly') {
-    const weekInMilliseconds = 7 * 24 * 60 * 60 * 1000;
-    return (now.getTime() - lastCompleted.getTime()) >= weekInMilliseconds;
-  }
+  // Parse repeat_time (HH:MM)
+  const [hours, minutes] = repeatTime.split(':').map(Number);
   
   if (repeatInterval === 'daily') {
-    const dayInMilliseconds = 24 * 60 * 60 * 1000;
-    return (now.getTime() - lastCompleted.getTime()) >= dayInMilliseconds;
+    // Nächste Wiederholung ist am nächsten Tag zur angegebenen Uhrzeit
+    const nextRepeat = new Date(lastCompleted);
+    nextRepeat.setDate(nextRepeat.getDate() + 1);
+    nextRepeat.setHours(hours, minutes, 0, 0);
+    
+    return now >= nextRepeat;
+  }
+  
+  if (repeatInterval === 'weekly') {
+    // Nächste Wiederholung ist in der nächsten Woche am angegebenen Wochentag zur Uhrzeit
+    const targetDay = repeatDayOfWeek ?? 1; // Default Montag
+    const nextRepeat = new Date(lastCompleted);
+    
+    // Finde nächsten Wochentag
+    const currentDay = nextRepeat.getDay();
+    let daysToAdd = targetDay - currentDay;
+    if (daysToAdd <= 0) {
+      daysToAdd += 7; // Nächste Woche
+    }
+    
+    nextRepeat.setDate(nextRepeat.getDate() + daysToAdd);
+    nextRepeat.setHours(hours, minutes, 0, 0);
+    
+    return now >= nextRepeat;
+  }
+  
+  if (repeatInterval === 'monthly') {
+    // Nächste Wiederholung ist im nächsten Monat am angegebenen Tag zur Uhrzeit
+    const targetDay = repeatDayOfMonth ?? 1;
+    const nextRepeat = new Date(lastCompleted);
+    
+    nextRepeat.setMonth(nextRepeat.getMonth() + 1);
+    nextRepeat.setDate(Math.min(targetDay, new Date(nextRepeat.getFullYear(), nextRepeat.getMonth() + 1, 0).getDate()));
+    nextRepeat.setHours(hours, minutes, 0, 0);
+    
+    return now >= nextRepeat;
   }
   
   return true;
@@ -63,8 +95,11 @@ questRouter.get('/character/:characterId', async (req, res) => {
          cq.status,
          cq.started_at,
          cq.completed_at,
+         cq.submitted_at,
          cq.grade,
          cq.feedback,
+         cq.submission_text,
+         cq.submission_file_url,
          eq.name as required_equipment_name
        FROM quests q
        INNER JOIN character_quests cq ON q.id = cq.quest_id AND cq.character_id = ?
@@ -75,6 +110,7 @@ questRouter.get('/character/:characterId', async (req, res) => {
     let quests = questsStmt.all(characterId, characterLevel);
     
     // Für jede Quest prüfen ob Equipment-Requirement erfüllt ist
+    // Und bei wiederholbaren Quests Status automatisch zurücksetzen
     quests = (quests as any[]).map((quest: any) => {
       if (quest.required_equipment_id) {
         const hasEquipment: any = db.prepare(`
@@ -93,6 +129,43 @@ questRouter.get('/character/:characterId', async (req, res) => {
       // Status standardmäßig auf 'available' setzen, falls nicht definiert
       if (!quest.status) {
         quest.status = 'available';
+      }
+      
+      // Für wiederholbare Quests: Prüfen ob Zeit für Wiederholung erreicht ist
+      if (quest.is_repeatable && quest.status === 'completed' && quest.last_completed_at) {
+        const canRepeat = canRepeatQuest(
+          quest.last_completed_at,
+          quest.repeat_interval,
+          quest.repeat_time,
+          quest.repeat_day_of_week,
+          quest.repeat_day_of_month
+        );
+        
+        if (canRepeat) {
+          // Quest zurücksetzen
+          const resetStmt = db.prepare(`
+            UPDATE character_quests
+            SET status = 'available',
+                submission_text = NULL,
+                submission_file_url = NULL,
+                submitted_at = NULL,
+                grade = NULL,
+                feedback = NULL,
+                graded_at = NULL,
+                graded_by_user_id = NULL
+            WHERE character_id = ? AND quest_id = ?
+          `);
+          resetStmt.run(characterId, quest.id);
+          
+          quest.status = 'available';
+          quest.submission_text = null;
+          quest.submission_file_url = null;
+          quest.submitted_at = null;
+          quest.grade = null;
+          quest.feedback = null;
+          quest.graded_at = null;
+          quest.graded_by_user_id = null;
+        }
       }
       
       return quest;
@@ -147,13 +220,11 @@ questRouter.post('/:questId/start', async (req, res) => {
       ).get(characterId, questId);
       
       if (existingQuest && existingQuest.status === 'completed') {
-        if (!canRepeatQuest(existingQuest.last_completed_at, quest.repeat_interval)) {
-          const lastCompleted = new Date(existingQuest.last_completed_at);
-          const nextAvailable = new Date(lastCompleted.getTime() + (quest.repeat_interval === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
+        if (!canRepeatQuest(existingQuest.last_completed_at, quest.repeat_interval, quest.repeat_time, quest.repeat_day_of_week, quest.repeat_day_of_month)) {
           return res.status(403).json({ 
             error: 'Diese Quest kann noch nicht wiederholt werden',
-            next_available: nextAvailable.toISOString(),
-            repeat_interval: quest.repeat_interval
+            repeat_interval: quest.repeat_interval,
+            repeat_time: quest.repeat_time
           });
         }
       }

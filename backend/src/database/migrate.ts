@@ -11,6 +11,7 @@ const createTables = () => {
         role TEXT DEFAULT 'nachwuchskraft',
         is_admin INTEGER DEFAULT 0,
         is_super_admin INTEGER DEFAULT 0,
+        pending_approval INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       )
     `);
@@ -22,6 +23,7 @@ const createTables = () => {
         user_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         title TEXT DEFAULT 'Azubi',
+        backstory TEXT,
         level INTEGER DEFAULT 1,
         xp INTEGER DEFAULT 0,
         xp_to_next_level INTEGER DEFAULT 100,

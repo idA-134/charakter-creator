@@ -318,8 +318,8 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
       SET grade = ?, feedback = ?, graded_at = datetime('now'), 
           graded_by_user_id = ?, status = ?,
           completed_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE NULL END
-      WHERE id = ?
-    `);
+      WHERE id = ?`
+    );
     updateStmt.run(
       grade, 
       feedback, 

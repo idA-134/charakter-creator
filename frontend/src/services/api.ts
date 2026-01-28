@@ -13,7 +13,17 @@ export const api = axios.create({
 export const characterAPI = {
   getByUser: (userId: number) => api.get(`/characters/user/${userId}`),
   getById: (id: number) => api.get(`/characters/${id}`),
-  create: (data: { user_id: number; name: string }) => api.post('/characters', data),
+  create: (data: {
+    user_id: number;
+    name: string;
+    backstory?: string;
+    programmierung?: number;
+    netzwerke?: number;
+    datenbanken?: number;
+    hardware?: number;
+    sicherheit?: number;
+    projektmanagement?: number;
+  }) => api.post('/characters', data),
   update: (id: number, data: any) => api.put(`/characters/${id}`, data),
   addXP: (id: number, xp: number) => api.post(`/characters/${id}/xp`, { xp }),
   addAttribute: (id: number, attribute: string, amount: number) => 
@@ -54,7 +64,7 @@ export const leaderboardAPI = {
 
 // Auth API
 export const authAPI = {
-  register: (data: { username: string; password: string }) => 
+  register: (data: { username: string; password: string; role?: string }) => 
     api.post('/auth/register', data),
   login: (data: { username: string; password: string }) => 
     api.post('/auth/login', data),

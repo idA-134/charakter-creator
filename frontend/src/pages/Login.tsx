@@ -10,6 +10,8 @@ export default function Login({ setUser }: Props) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [role, setRole] = useState<'nachwuchskraft' | 'dozent'>('nachwuchskraft');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -25,9 +27,22 @@ export default function Login({ setUser }: Props) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
         navigate('/dashboard');
       } else {
-        await authAPI.register({ username, password });
+        // Validierung für Registrierung
+        if (password.length < 6) {
+          setError('Passwort muss mindestens 6 Zeichen lang sein');
+          return;
+        }
+        
+        if (password !== passwordConfirm) {
+          setError('Passwörter stimmen nicht überein');
+          return;
+        }
+
+        await authAPI.register({ username, password, role });
         setIsLogin(true);
         setError('Registrierung erfolgreich! Bitte melde dich an.');
+        setPassword('');
+        setPasswordConfirm('');
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Ein Fehler ist aufgetreten');
@@ -60,6 +75,40 @@ export default function Login({ setUser }: Props) {
             />
           </div>
 
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Registrieren als:
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    value="nachwuchskraft"
+                    checked={role === 'nachwuchskraft'}
+                    onChange={(e) => setRole(e.target.value as 'nachwuchskraft' | 'dozent')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Nachwuchskraft (NWK)
+                  </span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    value="dozent"
+                    checked={role === 'dozent'}
+                    onChange={(e) => setRole(e.target.value as 'nachwuchskraft' | 'dozent')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Dozent (benötigt Admin-Bestätigung)
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Passwort
@@ -72,6 +121,21 @@ export default function Login({ setUser }: Props) {
               required
             />
           </div>
+
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Passwort bestätigen
+              </label>
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                required
+              />
+            </div>
+          )}
 
           {error && (
             <div className={`p-3 rounded-lg text-sm ${
@@ -94,6 +158,9 @@ export default function Login({ setUser }: Props) {
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
+              setPassword('');
+              setPasswordConfirm('');
+              setRole('nachwuchskraft');
             }}
             className="text-primary-600 hover:text-primary-700 text-sm"
           >

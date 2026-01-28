@@ -38,17 +38,86 @@ characterRouter.get('/:id', async (req, res) => {
 // Neuen Character erstellen
 characterRouter.post('/', async (req, res) => {
   try {
-    const { user_id, name } = req.body;
+    const {
+      user_id,
+      name,
+      backstory,
+      programmierung,
+      netzwerke,
+      datenbanken,
+      hardware,
+      sicherheit,
+      projektmanagement
+    } = req.body;
     
     if (!user_id || !name) {
       return res.status(400).json({ error: 'user_id und name sind erforderlich' });
     }
     
+    const trimmedBackstory = typeof backstory === 'string' ? backstory.trim() : null;
+    if (trimmedBackstory && trimmedBackstory.length > 1000) {
+      return res.status(400).json({ error: 'Geschichte darf maximal 1000 Zeichen lang sein' });
+    }
+
+    const defaultAttributes = {
+      programmierung: 10,
+      netzwerke: 10,
+      datenbanken: 10,
+      hardware: 10,
+      sicherheit: 10,
+      projektmanagement: 10
+    };
+
+    const providedAttributes = [programmierung, netzwerke, datenbanken, hardware, sicherheit, projektmanagement]
+      .some((val) => val !== undefined && val !== null);
+
+    const attributes = providedAttributes
+      ? {
+          programmierung: Number(programmierung),
+          netzwerke: Number(netzwerke),
+          datenbanken: Number(datenbanken),
+          hardware: Number(hardware),
+          sicherheit: Number(sicherheit),
+          projektmanagement: Number(projektmanagement)
+        }
+      : defaultAttributes;
+
+    if (providedAttributes) {
+      const values = Object.values(attributes);
+      const invalidNumber = values.some((val) => Number.isNaN(val));
+      if (invalidNumber) {
+        return res.status(400).json({ error: 'Attribute müssen Zahlen sein' });
+      }
+
+      const outOfRange = values.some((val) => val < 0 || val > 20);
+      if (outOfRange) {
+        return res.status(400).json({ error: 'Attribute müssen zwischen 0 und 20 liegen' });
+      }
+
+      const total = values.reduce((sum, val) => sum + val, 0);
+      if (total !== 60) {
+        return res.status(400).json({ error: 'Du musst genau 60 Attributpunkte vergeben' });
+      }
+    }
+
     const stmt = db.prepare(`
-      INSERT INTO characters (user_id, name) 
-      VALUES (?, ?) 
+      INSERT INTO characters (
+        user_id, name, backstory,
+        programmierung, netzwerke, datenbanken, hardware, sicherheit, projektmanagement
+      ) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
     `);
-    const info = stmt.run(user_id, name);
+    const info = stmt.run(
+      user_id,
+      name,
+      trimmedBackstory,
+      attributes.programmierung,
+      attributes.netzwerke,
+      attributes.datenbanken,
+      attributes.hardware,
+      attributes.sicherheit,
+      attributes.projektmanagement
+    );
     
     const newCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(info.lastInsertRowid);
     res.status(201).json(newCharacter);
@@ -62,16 +131,17 @@ characterRouter.post('/', async (req, res) => {
 characterRouter.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, title } = req.body;
+    const { name, title, backstory } = req.body;
     
     const stmt = db.prepare(`
       UPDATE characters 
       SET name = COALESCE(?, name),
           title = COALESCE(?, title),
+          backstory = COALESCE(?, backstory),
           updated_at = datetime('now')
       WHERE id = ?
     `);
-    stmt.run(name, title, id);
+    stmt.run(name, title, backstory, id);
     
     const updatedCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
     if (!updatedCharacter) {

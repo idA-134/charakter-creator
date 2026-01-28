@@ -15,7 +15,7 @@ const requireAdmin = (req: any, res: any, next: any) => {
 adminRouter.get('/users', requireAdmin, async (req, res) => {
   try {
     const stmt = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, created_at 
+      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
       FROM users 
       ORDER BY created_at DESC
     `);
@@ -23,6 +23,81 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
     res.json(users);
   } catch (error) {
     console.error('Fehler beim Abrufen der User:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Alle ausstehenden Dozenten-Genehmigungen abrufen
+adminRouter.get('/pending-dozenten', requireAdmin, async (req, res) => {
+  try {
+    const stmt = db.prepare(`
+      SELECT id, username, role, pending_approval, created_at 
+      FROM users 
+      WHERE role = 'dozent' AND pending_approval = 1
+      ORDER BY created_at DESC
+    `);
+    const dozenten = stmt.all();
+    res.json(dozenten);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der ausstehenden Dozenten:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Dozent genehmigen
+adminRouter.post('/approve-dozent/:userId', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
+    const user: any = db.prepare('SELECT * FROM users WHERE id = ? AND role = ? AND pending_approval = ?').get(userId, 'dozent', 1);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Ausstehender Dozent nicht gefunden' });
+    }
+    
+    // Aktualisiere den Status
+    const stmt = db.prepare('UPDATE users SET pending_approval = 0 WHERE id = ?');
+    stmt.run(userId);
+    
+    const updatedUser = db.prepare(`
+      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
+      FROM users WHERE id = ?
+    `).get(userId);
+    
+    // Erstelle eine Benachrichtigung für den Dozent
+    try {
+      createNotification(parseInt(userId), 'success', 'Dozent-Zugang genehmigt', 'Dein Dozent-Zugang wurde vom Admin genehmigt.');
+    } catch (e) {
+      console.error('Fehler beim Erstellen der Benachrichtigung:', e);
+    }
+    
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Fehler beim Genehmigen des Dozenten:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Dozent ablehnen
+adminRouter.post('/reject-dozent/:userId', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
+    const user: any = db.prepare('SELECT * FROM users WHERE id = ? AND role = ? AND pending_approval = ?').get(userId, 'dozent', 1);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Ausstehender Dozent nicht gefunden' });
+    }
+    
+    // Lösche den User
+    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
+    stmt.run(userId);
+    
+    res.json({ message: 'Dozent-Anfrage abgelehnt und Benutzer gelöscht', id: userId });
+  } catch (error) {
+    console.error('Fehler beim Ablehnen des Dozenten:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
@@ -37,15 +112,18 @@ adminRouter.put('/users/:userId/role', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Ungültige Rolle' });
     }
     
-    const stmt = db.prepare('UPDATE users SET role = ? WHERE id = ?');
-    const info = stmt.run(role, userId);
+    // Wenn zur Dozent-Rolle wechsel, setze pending_approval
+    const pendingApproval = role === 'dozent' ? 1 : 0;
+    
+    const stmt = db.prepare('UPDATE users SET role = ?, pending_approval = ? WHERE id = ?');
+    const info = stmt.run(role, pendingApproval, userId);
     
     if (info.changes === 0) {
       return res.status(404).json({ error: 'User nicht gefunden' });
     }
     
     const updatedUser = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, created_at 
+      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
       FROM users WHERE id = ?
     `).get(userId);
     
@@ -72,7 +150,7 @@ adminRouter.put('/users/:userId/admin', requireAdmin, async (req, res) => {
     stmt.run(is_admin ? 1 : 0, userId);
     
     const updatedUser = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, created_at 
+      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
       FROM users WHERE id = ?
     `).get(userId);
     
@@ -116,7 +194,7 @@ adminRouter.get('/users/nachwuchskraefte', requireAdmin, async (req, res) => {
              c.id as character_id, c.name as character_name, c.level, c.xp
       FROM users u
       LEFT JOIN characters c ON u.id = c.user_id
-      WHERE u.role = 'nachwuchskraft'
+      WHERE u.role = 'nachwuchskraft' AND u.pending_approval = 0
       ORDER BY u.created_at DESC
     `);
     const users = stmt.all();
@@ -131,9 +209,9 @@ adminRouter.get('/users/nachwuchskraefte', requireAdmin, async (req, res) => {
 adminRouter.get('/users/dozenten', requireAdmin, async (req, res) => {
   try {
     const stmt = db.prepare(`
-      SELECT id, username, role, created_at 
+      SELECT id, username, role, pending_approval, created_at 
       FROM users 
-      WHERE role = 'dozent' OR is_admin = 1
+      WHERE (role = 'dozent' OR is_admin = 1) AND pending_approval = 0
       ORDER BY created_at DESC
     `);
     const dozenten = stmt.all();

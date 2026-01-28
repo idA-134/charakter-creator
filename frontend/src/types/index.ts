@@ -3,6 +3,7 @@ export interface Character {
   user_id: number;
   name: string;
   title: string;
+  backstory?: string | null;
   level: number;
   xp: number;
   xp_to_next_level: number;

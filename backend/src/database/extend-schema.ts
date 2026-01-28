@@ -15,6 +15,28 @@ const addNewColumns = () => {
       console.log('⏭️  users.role existiert bereits');
     }
     
+    // Users Tabelle: pending_approval-Spalte hinzufügen
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN pending_approval INTEGER DEFAULT 0`);
+      console.log('✅ users.pending_approval hinzugefügt');
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column name')) {
+        throw e;
+      }
+      console.log('⏭️  users.pending_approval existiert bereits');
+    }
+
+    // Characters Tabelle: backstory-Spalte hinzufügen
+    try {
+      db.exec(`ALTER TABLE characters ADD COLUMN backstory TEXT`);
+      console.log('✅ characters.backstory hinzugefügt');
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column name')) {
+        throw e;
+      }
+      console.log('⏭️  characters.backstory existiert bereits');
+    }
+    
     // Quests Tabelle: neue Spalten hinzufügen
     const questColumns = [
       { name: 'is_title_quest', type: 'INTEGER DEFAULT 0' },
