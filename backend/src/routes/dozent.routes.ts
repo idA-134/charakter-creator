@@ -130,7 +130,7 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       finalXP = xp_reward || calculateScaledXP(baseXP, questMinLevel);
     }
     
-    const stmt = db.prepare(`
+    const newQuest = await db.get(`
       INSERT INTO quests (
         title, description, category, difficulty, xp_reward,
         programmierung_reward, netzwerke_reward, datenbanken_reward,
@@ -139,21 +139,18 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
         min_level, prerequisite_quest_id, created_by_user_id,
         is_repeatable, repeat_interval, due_date,
         repeat_time, repeat_day_of_week, repeat_day_of_month
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    const info = stmt.run(
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+      RETURNING *
+    `, [
       title, description, category, difficulty, finalXP,
       programmierung_reward || 0, netzwerke_reward || 0, datenbanken_reward || 0,
       hardware_reward || 0, sicherheit_reward || 0, projektmanagement_reward || 0,
-      is_title_quest ? 1 : 0, title_reward || null, 
+      is_title_quest ? 1 : 0, title_reward || null,
       equipment_reward_id || null, required_equipment_id || null,
       questMinLevel, prerequisite_quest_id || null, created_by_user_id,
       is_repeatable ? 1 : 0, repeat_interval || null, due_date || null,
       repeat_time || null, repeat_day_of_week ?? null, repeat_day_of_month ?? null
-    );
-    
-    const newQuest = db.prepare('SELECT * FROM quests WHERE id = ?').get(info.lastInsertRowid);
+    ]);
     res.status(201).json(newQuest);
   } catch (error) {
     console.error('Fehler beim Erstellen der Quest:', error);
@@ -176,37 +173,38 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
     }
     
     // Quest-Titel für Notification abrufen
-    const quest: any = db.prepare('SELECT title FROM quests WHERE id = ?').get(questId);
+    const quest: any = await db.get('SELECT title FROM quests WHERE id = $1', [questId]);
     const questTitle = quest?.title || 'Unbekannte Quest';
     
     // Zuweisung erstellen
-    const assignStmt = db.prepare(`
-      INSERT INTO quest_assignments (quest_id, user_id, group_id)
-      VALUES (?, ?, ?)
-    `);
-    assignStmt.run(questId, user_id || null, group_id || null);
+    await db.run(
+      `INSERT INTO quest_assignments (quest_id, user_id, group_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [questId, user_id || null, group_id || null]
+    );
     
     // Wenn Gruppe: Quest für alle Mitglieder verfügbar machen
     if (group_id) {
-      const members = db.prepare(`
+      const members = await db.all(`
         SELECT u.id, c.id as character_id
         FROM group_members gm
         JOIN users u ON gm.user_id = u.id
         LEFT JOIN characters c ON u.id = c.user_id
-        WHERE gm.group_id = ?
-      `).all(group_id);
-      
-      const questAssignStmt = db.prepare(`
-        INSERT OR IGNORE INTO character_quests (character_id, quest_id, status)
-        VALUES (?, ?, 'available')
-      `);
+        WHERE gm.group_id = $1
+      `, [group_id]);
       
       for (const member of members) {
         const typedMember = member as any;
         if (typedMember.character_id) {
-          questAssignStmt.run(typedMember.character_id, questId);
+          await db.run(
+            `INSERT INTO character_quests (character_id, quest_id, status)
+             VALUES ($1, $2, 'available')
+             ON CONFLICT DO NOTHING`,
+            [typedMember.character_id, questId]
+          );
           // Notification an User senden
-          createNotification(
+          await createNotification(
             typedMember.id,
             'quest_assigned',
             'Neue Quest zugewiesen',
@@ -216,15 +214,16 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
       }
     } else {
       // Einzelner User: Quest für Character verfügbar machen
-      const character: any = db.prepare('SELECT id FROM characters WHERE user_id = ?').get(user_id);
+      const character: any = await db.get('SELECT id FROM characters WHERE user_id = $1', [user_id]);
       if (character) {
-        const questAssignStmt = db.prepare(`
-          INSERT OR IGNORE INTO character_quests (character_id, quest_id, status)
-          VALUES (?, ?, 'available')
-        `);
-        questAssignStmt.run(character.id, questId);
+        await db.run(
+          `INSERT INTO character_quests (character_id, quest_id, status)
+           VALUES ($1, $2, 'available')
+           ON CONFLICT DO NOTHING`,
+          [character.id, questId]
+        );
         // Notification an User senden
-        createNotification(
+        await createNotification(
           user_id,
           'quest_assigned',
           'Neue Quest zugewiesen',
@@ -240,6 +239,29 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
   }
 });
 
+// Alle Abgaben abrufen (mit Quest-Creator Info zur Markierung)
+dozentRouter.get('/submissions/all', requireDozent, async (req, res) => {
+  try {
+    // Hole alle Abgaben mit Quest-Creator Info
+    const submissions = await db.all(`
+      SELECT cq.*, c.name as character_name, c.level,
+             u.id as user_id, u.username, 
+             q.created_by_user_id as quest_creator_id, q.title as quest_title
+      FROM character_quests cq
+      JOIN characters c ON cq.character_id = c.id
+      JOIN users u ON c.user_id = u.id
+      JOIN quests q ON cq.quest_id = q.id
+      WHERE cq.submitted_at IS NOT NULL
+      ORDER BY cq.submitted_at DESC
+    `);
+    
+    res.json(submissions);
+  } catch (error) {
+    console.error('Fehler beim Abrufen aller Abgaben:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
 // Alle Abgaben für eine Quest abrufen (nur Dozent der Quest oder Admin)
 dozentRouter.get('/quests/:questId/submissions', requireDozent, async (req, res) => {
   try {
@@ -247,7 +269,7 @@ dozentRouter.get('/quests/:questId/submissions', requireDozent, async (req, res)
     const user_id = req.query.user_id; // user_id des anfragenden Dozenten aus Query-Parameter
     
     // Quest-Creator abrufen
-    const quest: any = db.prepare('SELECT created_by_user_id FROM quests WHERE id = ?').get(questId);
+    const quest: any = await db.get('SELECT created_by_user_id FROM quests WHERE id = $1', [questId]);
     if (!quest) {
       return res.status(404).json({ error: 'Quest nicht gefunden' });
     }
@@ -258,15 +280,15 @@ dozentRouter.get('/quests/:questId/submissions', requireDozent, async (req, res)
       return res.status(403).json({ error: 'Nur der Dozent der Quest kann die Abgaben sehen' });
     }
     
-    const submissions = db.prepare(`
+    const submissions = await db.all(`
       SELECT cq.*, c.name as character_name, c.level,
              u.id as user_id, u.username
       FROM character_quests cq
       JOIN characters c ON cq.character_id = c.id
       JOIN users u ON c.user_id = u.id
-      WHERE cq.quest_id = ? AND cq.submitted_at IS NOT NULL
+      WHERE cq.quest_id = $1 AND cq.submitted_at IS NOT NULL
       ORDER BY cq.submitted_at DESC
-    `).all(questId);
+    `, [questId]);
     
     res.json(submissions);
   } catch (error) {
@@ -295,48 +317,44 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
       return res.status(400).json({ error: 'Bei Ablehnung ist eine Begründung erforderlich' });
     }
     
-    // Quest-Info mit Creator abrufen
-    const submissionData: any = db.prepare(`
-      SELECT cq.*, q.created_by_user_id
+    // Prüfe ob Submission existiert
+    const submissionData: any = await db.get(`
+      SELECT cq.*
       FROM character_quests cq
-      JOIN quests q ON cq.quest_id = q.id
-      WHERE cq.id = ?
-    `).get(submissionId);
+      WHERE cq.id = $1
+    `, [submissionId]);
     
     if (!submissionData) {
       return res.status(404).json({ error: 'Abgabe nicht gefunden' });
     }
     
-    // Prüfe ob graded_by_user_id der Creator der Quest ist
-    if (graded_by_user_id !== submissionData.created_by_user_id) {
-      return res.status(403).json({ error: 'Nur der Dozent der Quest kann diese Abgabe bewerten' });
-    }
+    // Alle Dozenten/Admins können alle Abgaben bewerten
+    // Keine Einschränkung auf den Creator der Quest
     
     // Abgabe als bewertet markieren
-    const updateStmt = db.prepare(`
+    await db.run(`
       UPDATE character_quests
-      SET grade = ?, feedback = ?, graded_at = datetime('now'), 
-          graded_by_user_id = ?, status = ?,
-          completed_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE NULL END
-      WHERE id = ?`
-    );
-    updateStmt.run(
-      grade, 
-      feedback, 
-      graded_by_user_id, 
-      grade === 'approved' ? 'completed' : 'rejected',
-      grade,
-      submissionId
+      SET grade = $1, feedback = $2, graded_at = (now()::text), 
+          graded_by_user_id = $3, status = $4,
+          completed_at = CASE WHEN $1 = 'approved' THEN (now()::text) ELSE NULL END
+      WHERE id = $5`,
+      [
+        grade,
+        feedback,
+        graded_by_user_id,
+        grade === 'approved' ? 'completed' : 'rejected',
+        submissionId
+      ]
     );
     
     // Quest-Informationen abrufen für Belohnungen
-    const submission: any = db.prepare(`
+    const submission: any = await db.get(`
       SELECT cq.*, q.*, c.id as character_id, c.xp as current_xp, c.level as current_level, c.xp_to_next_level
       FROM character_quests cq
       JOIN quests q ON cq.quest_id = q.id
       JOIN characters c ON cq.character_id = c.id
-      WHERE cq.id = ?
-    `).get(submissionId);
+      WHERE cq.id = $1
+    `, [submissionId]);
     
     if (!submission) {
       return res.status(404).json({ error: 'Abgabe nicht gefunden' });
@@ -377,66 +395,80 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
       }
       
       // Belohnungen vergeben mit Level-Up
-      const rewardStmt = db.prepare(`
+      await db.run(`
         UPDATE characters
-        SET xp = ?,
-            level = ?,
-            xp_to_next_level = ?,
-            programmierung = MIN(programmierung + ?, 100),
-            netzwerke = MIN(netzwerke + ?, 100),
-            datenbanken = MIN(datenbanken + ?, 100),
-            hardware = MIN(hardware + ?, 100),
-            sicherheit = MIN(sicherheit + ?, 100),
-            projektmanagement = MIN(projektmanagement + ?, 100),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `);
-      rewardStmt.run(
+        SET xp = $1,
+            level = $2,
+            xp_to_next_level = $3,
+            programmierung = LEAST(programmierung + $4, 250),
+            netzwerke = LEAST(netzwerke + $5, 250),
+            datenbanken = LEAST(datenbanken + $6, 250),
+            hardware = LEAST(hardware + $7, 250),
+            sicherheit = LEAST(sicherheit + $8, 250),
+            projektmanagement = LEAST(projektmanagement + $9, 250),
+            updated_at = (now()::text)
+        WHERE id = $10
+      `, [
         newXp, newLevel, xpToNext,
         finalProg, finalNetz, finalDB, finalHW, finalSec, finalPM,
         submission.character_id
-      );
+      ]);
       
       // Titel vergeben falls Titel-Quest
       if (submission.is_title_quest && submission.title_reward) {
         // Titel zur character_titles Tabelle hinzufügen
-        const addTitleStmt = db.prepare(`
-          INSERT OR IGNORE INTO character_titles (character_id, title, is_active)
-          VALUES (?, ?, 0)
-        `);
-        addTitleStmt.run(submission.character_id, submission.title_reward);
+        await db.run(
+          `INSERT INTO character_titles (character_id, title, is_active)
+           VALUES ($1, $2, 0)
+           ON CONFLICT DO NOTHING`,
+          [submission.character_id, submission.title_reward]
+        );
         
         // Optional: Titel direkt als aktiv setzen und Character-Titel aktualisieren
         // (kann später vom User geändert werden)
-        const titleStmt = db.prepare('UPDATE characters SET title = ? WHERE id = ?');
-        titleStmt.run(submission.title_reward, submission.character_id);
+        await db.run('UPDATE characters SET title = $1 WHERE id = $2', [submission.title_reward, submission.character_id]);
         
         // Titel als aktiv markieren
-        const activateTitleStmt = db.prepare(`
-          UPDATE character_titles 
-          SET is_active = 1 
-          WHERE character_id = ? AND title = ?
-        `);
-        activateTitleStmt.run(submission.character_id, submission.title_reward);
+        await db.run(
+          `UPDATE character_titles 
+           SET is_active = 1 
+           WHERE character_id = $1 AND title = $2`,
+          [submission.character_id, submission.title_reward]
+        );
       }
       
       // Equipment vergeben falls vorhanden
       if (submission.equipment_reward_id) {
-        const equipStmt = db.prepare(`
-          INSERT OR IGNORE INTO character_equipment (character_id, equipment_id, equipped)
-          VALUES (?, ?, 0)
-        `);
-        equipStmt.run(submission.character_id, submission.equipment_reward_id);
+        await db.run(
+          `INSERT INTO character_equipment (character_id, equipment_id, equipped)
+           VALUES ($1, $2, 0)
+           ON CONFLICT DO NOTHING`,
+          [submission.character_id, submission.equipment_reward_id]
+        );
       }
+
+      // Quest ins Quest-Log verschieben
+      await db.run(`
+        INSERT INTO quest_log (character_id, quest_id, quest_title, quest_description, completed_at, xp_earned, grade, feedback)
+        VALUES ($1, $2, $3, $4, now(), $5, $6, $7)
+      `, [
+        submission.character_id,
+        submission.quest_id,
+        submission.title,
+        submission.description,
+        submission.xp_reward,
+        grade,
+        feedback
+      ]);
     }
     
-    const gradedSubmission = db.prepare(`
+    const gradedSubmission = await db.get(`
       SELECT cq.*, c.name as character_name, u.username
       FROM character_quests cq
       JOIN characters c ON cq.character_id = c.id
       JOIN users u ON c.user_id = u.id
-      WHERE cq.id = ?
-    `).get(submissionId);
+      WHERE cq.id = $1
+    `, [submissionId]);
     
     res.json({
       message: grade === 'approved' ? 'Abgabe angenommen und Belohnungen vergeben' : 'Abgabe abgelehnt',
@@ -479,18 +511,16 @@ dozentRouter.get('/quests/all', requireDozent, async (req, res) => {
     
     // Admin sieht alle Quests, Dozent nur eigene
     if (isAdmin !== 'true' && userId) {
-      query += ' WHERE q.created_by_user_id = ?';
+      query += ' WHERE q.created_by_user_id = $1';
       params.push(userId);
     }
     
     query += `
-      GROUP BY q.id
+      GROUP BY q.id, u.username
       ORDER BY q.created_at DESC
     `;
     
-    const quests = params.length > 0 
-      ? db.prepare(query).all(...params)
-      : db.prepare(query).all();
+    const quests = await db.all(query, params.length > 0 ? params : undefined);
     
     res.json(quests);
   } catch (error) {
@@ -504,19 +534,26 @@ dozentRouter.get('/quests/my/:userId', requireDozent, async (req, res) => {
   try {
     const { userId } = req.params;
     
-    const quests = db.prepare(`
+    const quests = await db.all(`
       SELECT q.*, 
              COUNT(DISTINCT qa.id) as assignment_count,
              COUNT(DISTINCT cq.id) as submission_count
       FROM quests q
       LEFT JOIN quest_assignments qa ON q.id = qa.quest_id
       LEFT JOIN character_quests cq ON q.id = cq.quest_id AND cq.submitted_at IS NOT NULL
-      WHERE q.created_by_user_id = ?
+      WHERE q.created_by_user_id = $1
       GROUP BY q.id
       ORDER BY q.created_at DESC
-    `).all(userId);
+    `, [userId]);
     
-    res.json(quests);
+    // Convert counts from strings to numbers
+    const questsWithCounts = quests.map((q: any) => ({
+      ...q,
+      assignment_count: parseInt(q.assignment_count) || 0,
+      submission_count: parseInt(q.submission_count) || 0
+    }));
+    
+    res.json(questsWithCounts);
   } catch (error) {
     console.error('Fehler beim Abrufen der Quests:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -535,38 +572,35 @@ dozentRouter.put('/quests/:questId', requireDozent, async (req, res) => {
       min_level, prerequisite_quest_id
     } = req.body;
     
-    const stmt = db.prepare(`
+    const updatedQuest = await db.get(`
       UPDATE quests
-      SET title = COALESCE(?, title),
-          description = COALESCE(?, description),
-          category = COALESCE(?, category),
-          difficulty = COALESCE(?, difficulty),
-          xp_reward = COALESCE(?, xp_reward),
-          programmierung_reward = COALESCE(?, programmierung_reward),
-          netzwerke_reward = COALESCE(?, netzwerke_reward),
-          datenbanken_reward = COALESCE(?, datenbanken_reward),
-          hardware_reward = COALESCE(?, hardware_reward),
-          sicherheit_reward = COALESCE(?, sicherheit_reward),
-          projektmanagement_reward = COALESCE(?, projektmanagement_reward),
-          is_title_quest = COALESCE(?, is_title_quest),
-          title_reward = COALESCE(?, title_reward),
-          equipment_reward_id = COALESCE(?, equipment_reward_id),
-          required_equipment_id = COALESCE(?, required_equipment_id),
-          min_level = COALESCE(?, min_level),
-          prerequisite_quest_id = COALESCE(?, prerequisite_quest_id)
-      WHERE id = ?
-    `);
-    
-    stmt.run(
+      SET title = COALESCE($1, title),
+          description = COALESCE($2, description),
+          category = COALESCE($3, category),
+          difficulty = COALESCE($4, difficulty),
+          xp_reward = COALESCE($5, xp_reward),
+          programmierung_reward = COALESCE($6, programmierung_reward),
+          netzwerke_reward = COALESCE($7, netzwerke_reward),
+          datenbanken_reward = COALESCE($8, datenbanken_reward),
+          hardware_reward = COALESCE($9, hardware_reward),
+          sicherheit_reward = COALESCE($10, sicherheit_reward),
+          projektmanagement_reward = COALESCE($11, projektmanagement_reward),
+          is_title_quest = COALESCE($12, is_title_quest),
+          title_reward = COALESCE($13, title_reward),
+          equipment_reward_id = COALESCE($14, equipment_reward_id),
+          required_equipment_id = COALESCE($15, required_equipment_id),
+          min_level = COALESCE($16, min_level),
+          prerequisite_quest_id = COALESCE($17, prerequisite_quest_id)
+      WHERE id = $18
+      RETURNING *
+    `, [
       title, description, category, difficulty, xp_reward,
       programmierung_reward, netzwerke_reward, datenbanken_reward,
       hardware_reward, sicherheit_reward, projektmanagement_reward,
       is_title_quest !== undefined ? (is_title_quest ? 1 : 0) : null,
       title_reward, equipment_reward_id, required_equipment_id, min_level, prerequisite_quest_id,
       questId
-    );
-    
-    const updatedQuest = db.prepare('SELECT * FROM quests WHERE id = ?').get(questId);
+    ]);
     res.json(updatedQuest);
   } catch (error) {
     console.error('Fehler beim Bearbeiten der Quest:', error);
@@ -579,10 +613,9 @@ dozentRouter.delete('/quests/:questId', requireDozent, async (req, res) => {
   try {
     const { questId } = req.params;
     
-    const stmt = db.prepare('DELETE FROM quests WHERE id = ?');
-    const info = stmt.run(questId);
+    const result = await db.run('DELETE FROM quests WHERE id = $1', [questId]);
     
-    if (info.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Quest nicht gefunden' });
     }
     

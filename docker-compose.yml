@@ -1,0 +1,38 @@
+# Docker-Compose für lokale Entwicklung mit PostgreSQL
+# Nutzung: docker-compose up -d
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: charakter-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: charakter_db
+      POSTGRES_USER: charakter
+      POSTGRES_PASSWORD: CharakterDev2026
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U charakter -d charakter_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+
+# Verwendung:
+# 1. docker-compose up -d        -> Startet PostgreSQL
+# 2. docker-compose down          -> Stoppt PostgreSQL
+# 3. docker-compose logs -f       -> Zeigt Logs
+# 4. docker-compose exec postgres psql -U charakter -d charakter_db  -> PostgreSQL Console
+
+# Connection String für .env:
+# DATABASE_URL=postgresql://charakter:CharakterDev2026@localhost:5432/charakter_db

@@ -7,9 +7,13 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "db:migrate": "tsx src/database/migrate.ts",
+    "db:migrate": "tsx src/database/migrate-postgres.ts",
+    "db:migrate-sqlite": "tsx src/database/migrate.ts",
+    "db:migrate-from-sqlite": "tsx src/database/migrate-sqlite-to-postgres.ts",
     "db:setup-admin": "tsx src/database/setup-admin.ts",
-    "db:seed": "tsx src/database/seed.ts"
+    "db:seed": "tsx src/database/seed.ts",
+    "db:migrate-journal": "tsx src/database/add-journal-tables.ts",
+    "db:migrate-journal-sqlite": "tsx src/database/add-journal-tables-sqlite.ts"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -21,6 +25,7 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "pg": "^8.17.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {

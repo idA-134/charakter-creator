@@ -8,7 +8,7 @@ leaderboardRouter.get('/level', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     
-    const stmt = db.prepare(
+    const result = await db.all(
       `SELECT 
          c.id,
          c.name,
@@ -19,9 +19,9 @@ leaderboardRouter.get('/level', async (req, res) => {
        FROM characters c
        JOIN users u ON c.user_id = u.id
        ORDER BY c.level DESC, c.xp DESC
-       LIMIT ?`
+       LIMIT $1`,
+      [limit]
     );
-    const result = stmt.all(limit);
     
     res.json(result);
   } catch (error) {
@@ -35,7 +35,7 @@ leaderboardRouter.get('/stats', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     
-    const stmt = db.prepare(
+    const result = await db.all(
       `SELECT 
          c.id,
          c.name,
@@ -52,9 +52,9 @@ leaderboardRouter.get('/stats', async (req, res) => {
        FROM characters c
        JOIN users u ON c.user_id = u.id
        ORDER BY total_stats DESC
-       LIMIT ?`
+       LIMIT $1`,
+      [limit]
     );
-    const result = stmt.all(limit);
     
     res.json(result);
   } catch (error) {
@@ -68,7 +68,7 @@ leaderboardRouter.get('/achievements', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     
-    const stmt = db.prepare(
+    const result = await db.all(
       `SELECT 
          c.id,
          c.name,
@@ -81,9 +81,9 @@ leaderboardRouter.get('/achievements', async (req, res) => {
        LEFT JOIN character_achievements ca ON c.id = ca.character_id
        GROUP BY c.id, u.username
        ORDER BY achievement_count DESC
-       LIMIT ?`
+       LIMIT $1`,
+      [limit]
     );
-    const result = stmt.all(limit);
     
     res.json(result);
   } catch (error) {
@@ -97,7 +97,7 @@ leaderboardRouter.get('/quests', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
     
-    const stmt = db.prepare(
+    const result = await db.all(
       `SELECT 
          c.id,
          c.name,
@@ -110,9 +110,9 @@ leaderboardRouter.get('/quests', async (req, res) => {
        LEFT JOIN character_quests cq ON c.id = cq.character_id AND cq.status = 'completed'
        GROUP BY c.id, u.username
        ORDER BY completed_quests DESC
-       LIMIT ?`
+       LIMIT $1`,
+      [limit]
     );
-    const result = stmt.all(limit);
     
     res.json(result);
   } catch (error) {

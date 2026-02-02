@@ -1,29 +1,53 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+#!/usr/bin/env tsx
+/**
+ * PostgreSQL Schema Migration
+ * Erstellt alle benötigten Tabellen in PostgreSQL
+ */
 
-const dbPath = path.join(__dirname, '..', '..', 'database.sqlite');
-const db = new Database(dbPath);
+import { db, pool } from './db';
 
-const createTables = () => {
+async function createTables() {
   try {
-    // Users Tabelle - erweitert mit Rollen
-    db.exec(`
+    console.log('🚀 Starte PostgreSQL Schema Migration (SQLite kompatibel)...\n');
+
+    if (process.env.DB_RESET === 'true') {
+      console.log('⚠️  DB_RESET=true -> Lösche bestehende Tabellen...');
+      await db.query(`DROP TABLE IF EXISTS quest_submissions CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS notifications CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS character_titles CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS quest_assignments CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS group_members CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS groups CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS character_quests CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS quests CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS character_achievements CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS achievements CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS character_equipment CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS equipment CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS characters CASCADE`);
+      await db.query(`DROP TABLE IF EXISTS users CASCADE`);
+    }
+
+    // Users Tabelle
+    console.log('📋 Erstelle users Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         role TEXT DEFAULT 'nachwuchskraft',
         is_admin INTEGER DEFAULT 0,
         is_super_admin INTEGER DEFAULT 0,
         pending_approval INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TEXT DEFAULT (now()::text)
       )
     `);
 
     // Characters Tabelle
-    db.exec(`
+    console.log('📋 Erstelle characters Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS characters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         name TEXT NOT NULL,
         title TEXT DEFAULT 'Azubi',
@@ -31,49 +55,47 @@ const createTables = () => {
         level INTEGER DEFAULT 1,
         xp INTEGER DEFAULT 0,
         xp_to_next_level INTEGER DEFAULT 100,
-        
         programmierung INTEGER DEFAULT 10,
         netzwerke INTEGER DEFAULT 10,
         datenbanken INTEGER DEFAULT 10,
         hardware INTEGER DEFAULT 10,
         sicherheit INTEGER DEFAULT 10,
         projektmanagement INTEGER DEFAULT 10,
-        
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (now()::text),
+        updated_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
 
     // Equipment Tabelle
-    db.exec(`
+    console.log('📋 Erstelle equipment Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS equipment (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
         type TEXT NOT NULL,
         rarity TEXT DEFAULT 'common',
-        
         programmierung_bonus INTEGER DEFAULT 0,
         netzwerke_bonus INTEGER DEFAULT 0,
         datenbanken_bonus INTEGER DEFAULT 0,
         hardware_bonus INTEGER DEFAULT 0,
         sicherheit_bonus INTEGER DEFAULT 0,
         projektmanagement_bonus INTEGER DEFAULT 0,
-        
         min_level INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TEXT DEFAULT (now()::text)
       )
     `);
 
     // Character Equipment
-    db.exec(`
+    console.log('📋 Erstelle character_equipment Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS character_equipment (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         character_id INTEGER NOT NULL,
         equipment_id INTEGER NOT NULL,
         equipped INTEGER DEFAULT 0,
-        acquired_at TEXT DEFAULT (datetime('now')),
+        acquired_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
         FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
         UNIQUE(character_id, equipment_id)
@@ -81,9 +103,10 @@ const createTables = () => {
     `);
 
     // Achievements Tabelle
-    db.exec(`
+    console.log('📋 Erstelle achievements Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS achievements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
         icon TEXT,
@@ -91,66 +114,68 @@ const createTables = () => {
         xp_reward INTEGER DEFAULT 0,
         requirement_type TEXT,
         requirement_value INTEGER,
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TEXT DEFAULT (now()::text)
       )
     `);
 
     // Character Achievements
-    db.exec(`
+    console.log('📋 Erstelle character_achievements Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS character_achievements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         character_id INTEGER NOT NULL,
         achievement_id INTEGER NOT NULL,
-        unlocked_at TEXT DEFAULT (datetime('now')),
+        unlocked_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
         FOREIGN KEY (achievement_id) REFERENCES achievements(id) ON DELETE CASCADE,
         UNIQUE(character_id, achievement_id)
       )
     `);
 
-    // Quests Tabelle - erweitert für Dozenten-System
-    db.exec(`
+    // Quests Tabelle
+    console.log('📋 Erstelle quests Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS quests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
         category TEXT,
         difficulty TEXT DEFAULT 'beginner',
         xp_reward INTEGER DEFAULT 50,
-        
         programmierung_reward INTEGER DEFAULT 0,
         netzwerke_reward INTEGER DEFAULT 0,
         datenbanken_reward INTEGER DEFAULT 0,
         hardware_reward INTEGER DEFAULT 0,
         sicherheit_reward INTEGER DEFAULT 0,
         projektmanagement_reward INTEGER DEFAULT 0,
-        
         is_title_quest INTEGER DEFAULT 0,
         title_reward TEXT,
         equipment_reward_id INTEGER,
-        
+        required_equipment_id INTEGER,
         min_level INTEGER DEFAULT 1,
         prerequisite_quest_id INTEGER,
         created_by_user_id INTEGER,
-        
         is_repeatable INTEGER DEFAULT 0,
         repeat_interval TEXT,
         due_date TEXT,
         repeat_time TEXT,
         repeat_day_of_week INTEGER,
         repeat_day_of_month INTEGER,
-        
-        created_at TEXT DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (prerequisite_quest_id) REFERENCES quests(id) ON DELETE SET NULL,
         FOREIGN KEY (equipment_reward_id) REFERENCES equipment(id) ON DELETE SET NULL,
         FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
 
-    // Character Quests - erweitert mit Abgaben
-    db.exec(`
+    // Sicherstellen, dass required_equipment_id auch bei bestehenden DBs existiert
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS required_equipment_id INTEGER`);
+
+    // Character Quests
+    console.log('📋 Erstelle character_quests Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS character_quests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         character_id INTEGER NOT NULL,
         quest_id INTEGER NOT NULL,
         status TEXT DEFAULT 'available',
@@ -172,38 +197,41 @@ const createTables = () => {
     `);
 
     // Gruppen Tabelle
-    db.exec(`
+    console.log('📋 Erstelle groups Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS groups (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
         created_by_user_id INTEGER NOT NULL,
-        created_at TEXT DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
 
     // Gruppen-Mitglieder
-    db.exec(`
+    console.log('📋 Erstelle group_members Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS group_members (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         group_id INTEGER NOT NULL,
         user_id INTEGER NOT NULL,
-        joined_at TEXT DEFAULT (datetime('now')),
+        joined_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         UNIQUE(group_id, user_id)
       )
     `);
 
-    // Quest-Zuweisungen (für Gruppen oder einzelne User)
-    db.exec(`
+    // Quest-Zuweisungen
+    console.log('📋 Erstelle quest_assignments Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS quest_assignments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         quest_id INTEGER NOT NULL,
         user_id INTEGER,
         group_id INTEGER,
-        assigned_at TEXT DEFAULT (datetime('now')),
+        assigned_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
@@ -211,38 +239,60 @@ const createTables = () => {
       )
     `);
 
-    // Character Titles - Errungene Titel
-    db.exec(`
+    // Character Titles
+    console.log('📋 Erstelle character_titles Tabelle...');
+    await db.query(`
       CREATE TABLE IF NOT EXISTS character_titles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         character_id INTEGER NOT NULL,
         title TEXT NOT NULL,
-        unlocked_at TEXT DEFAULT (datetime('now')),
+        unlocked_at TEXT DEFAULT (now()::text),
         is_active INTEGER DEFAULT 0,
         FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
         UNIQUE(character_id, title)
       )
     `);
 
-    console.log('✅ Datenbank-Tabellen erfolgreich erstellt!');
-  } catch (error) {
-    console.error('❌ Fehler beim Erstellen der Tabellen:', error);
-    throw error;
-  }
-};
+    // Notifications
+    console.log('📋 Erstelle notifications Tabelle...');
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        is_read INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (now()::text),
+        read_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
 
-// Script ausführen
-if (require.main === module) {
-  try {
-    createTables();
-    console.log('Migration abgeschlossen');
-    db.close();
-    process.exit(0);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)`);
+
+    console.log('\n✅ Migration erfolgreich abgeschlossen!');
+    console.log('\n📊 Erstelle Tabellen-Liste...');
+
+    const result = await db.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+
+    console.log('\nErstellte Tabellen:');
+    result.rows.forEach((row: any) => {
+      console.log(`  ✓ ${row.table_name}`);
+    });
   } catch (error) {
-    console.error('Migration fehlgeschlagen:', error);
-    db.close();
-    process.exit(1);
+    console.error('❌ Migration fehlgeschlagen:', error);
+    throw error;
+  } finally {
+    await pool.end();
   }
 }
 
-export { createTables };
+// Run migration
+createTables();

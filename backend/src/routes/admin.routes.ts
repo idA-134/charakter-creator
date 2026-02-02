@@ -14,12 +14,11 @@ const requireAdmin = (req: any, res: any, next: any) => {
 // Alle User abrufen
 adminRouter.get('/users', requireAdmin, async (req, res) => {
   try {
-    const stmt = db.prepare(`
+    const users = await db.all(`
       SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
       FROM users 
       ORDER BY created_at DESC
     `);
-    const users = stmt.all();
     res.json(users);
   } catch (error) {
     console.error('Fehler beim Abrufen der User:', error);
@@ -30,13 +29,12 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
 // Alle ausstehenden Dozenten-Genehmigungen abrufen
 adminRouter.get('/pending-dozenten', requireAdmin, async (req, res) => {
   try {
-    const stmt = db.prepare(`
+    const dozenten = await db.all(`
       SELECT id, username, role, pending_approval, created_at 
       FROM users 
       WHERE role = 'dozent' AND pending_approval = 1
       ORDER BY created_at DESC
     `);
-    const dozenten = stmt.all();
     res.json(dozenten);
   } catch (error) {
     console.error('Fehler beim Abrufen der ausstehenden Dozenten:', error);
@@ -50,20 +48,19 @@ adminRouter.post('/approve-dozent/:userId', requireAdmin, async (req, res) => {
     const { userId } = req.params;
     
     // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
-    const user: any = db.prepare('SELECT * FROM users WHERE id = ? AND role = ? AND pending_approval = ?').get(userId, 'dozent', 1);
+    const user: any = await db.get('SELECT * FROM users WHERE id = $1 AND role = $2 AND pending_approval = $3', [userId, 'dozent', 1]);
     
     if (!user) {
       return res.status(404).json({ error: 'Ausstehender Dozent nicht gefunden' });
     }
     
     // Aktualisiere den Status
-    const stmt = db.prepare('UPDATE users SET pending_approval = 0 WHERE id = ?');
-    stmt.run(userId);
-    
-    const updatedUser = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
-      FROM users WHERE id = ?
-    `).get(userId);
+    const updatedUser = await db.get(`
+      UPDATE users
+      SET pending_approval = 0
+      WHERE id = $1
+      RETURNING id, username, role, is_admin, is_super_admin, pending_approval, created_at
+    `, [userId]);
     
     // Erstelle eine Benachrichtigung für den Dozent
     try {
@@ -85,15 +82,14 @@ adminRouter.post('/reject-dozent/:userId', requireAdmin, async (req, res) => {
     const { userId } = req.params;
     
     // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
-    const user: any = db.prepare('SELECT * FROM users WHERE id = ? AND role = ? AND pending_approval = ?').get(userId, 'dozent', 1);
+    const user: any = await db.get('SELECT * FROM users WHERE id = $1 AND role = $2 AND pending_approval = $3', [userId, 'dozent', 1]);
     
     if (!user) {
       return res.status(404).json({ error: 'Ausstehender Dozent nicht gefunden' });
     }
     
     // Lösche den User
-    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
-    stmt.run(userId);
+    await db.run('DELETE FROM users WHERE id = $1', [userId]);
     
     res.json({ message: 'Dozent-Anfrage abgelehnt und Benutzer gelöscht', id: userId });
   } catch (error) {
@@ -115,17 +111,14 @@ adminRouter.put('/users/:userId/role', requireAdmin, async (req, res) => {
     // Wenn zur Dozent-Rolle wechsel, setze pending_approval
     const pendingApproval = role === 'dozent' ? 1 : 0;
     
-    const stmt = db.prepare('UPDATE users SET role = ?, pending_approval = ? WHERE id = ?');
-    const info = stmt.run(role, pendingApproval, userId);
+    const updatedUser = await db.get(
+      'UPDATE users SET role = $1, pending_approval = $2 WHERE id = $3 RETURNING id, username, role, is_admin, is_super_admin, pending_approval, created_at',
+      [role, pendingApproval, userId]
+    );
     
-    if (info.changes === 0) {
+    if (!updatedUser) {
       return res.status(404).json({ error: 'User nicht gefunden' });
     }
-    
-    const updatedUser = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
-      FROM users WHERE id = ?
-    `).get(userId);
     
     res.json(updatedUser);
   } catch (error) {
@@ -141,18 +134,15 @@ adminRouter.put('/users/:userId/admin', requireAdmin, async (req, res) => {
     const { is_admin } = req.body;
     
     // Super-Admin kann nicht geändert werden
-    const user: any = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(userId);
+    const user: any = await db.get('SELECT is_super_admin FROM users WHERE id = $1', [userId]);
     if (user && user.is_super_admin) {
       return res.status(403).json({ error: 'Super-Admin kann nicht geändert werden' });
     }
     
-    const stmt = db.prepare('UPDATE users SET is_admin = ? WHERE id = ?');
-    stmt.run(is_admin ? 1 : 0, userId);
-    
-    const updatedUser = db.prepare(`
-      SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
-      FROM users WHERE id = ?
-    `).get(userId);
+    const updatedUser = await db.get(
+      'UPDATE users SET is_admin = $1 WHERE id = $2 RETURNING id, username, role, is_admin, is_super_admin, pending_approval, created_at',
+      [is_admin ? 1 : 0, userId]
+    );
     
     res.json(updatedUser);
   } catch (error) {
@@ -167,15 +157,14 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
     const { userId } = req.params;
     
     // Super-Admin kann nicht gelöscht werden
-    const user: any = db.prepare('SELECT is_super_admin FROM users WHERE id = ?').get(userId);
+    const user: any = await db.get('SELECT is_super_admin FROM users WHERE id = $1', [userId]);
     if (user && user.is_super_admin) {
       return res.status(403).json({ error: 'Super-Admin kann nicht gelöscht werden' });
     }
     
-    const stmt = db.prepare('DELETE FROM users WHERE id = ?');
-    const info = stmt.run(userId);
+    const result = await db.run('DELETE FROM users WHERE id = $1', [userId]);
     
-    if (info.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'User nicht gefunden' });
     }
     
@@ -189,7 +178,7 @@ adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
 // Alle Nachwuchskräfte abrufen
 adminRouter.get('/users/nachwuchskraefte', requireAdmin, async (req, res) => {
   try {
-    const stmt = db.prepare(`
+    const users = await db.all(`
       SELECT u.id, u.username, u.created_at,
              c.id as character_id, c.name as character_name, c.level, c.xp
       FROM users u
@@ -197,7 +186,6 @@ adminRouter.get('/users/nachwuchskraefte', requireAdmin, async (req, res) => {
       WHERE u.role = 'nachwuchskraft' AND u.pending_approval = 0
       ORDER BY u.created_at DESC
     `);
-    const users = stmt.all();
     res.json(users);
   } catch (error) {
     console.error('Fehler beim Abrufen der Nachwuchskräfte:', error);
@@ -208,13 +196,12 @@ adminRouter.get('/users/nachwuchskraefte', requireAdmin, async (req, res) => {
 // Alle Dozenten abrufen
 adminRouter.get('/users/dozenten', requireAdmin, async (req, res) => {
   try {
-    const stmt = db.prepare(`
+    const dozenten = await db.all(`
       SELECT id, username, role, pending_approval, created_at 
       FROM users 
       WHERE (role = 'dozent' OR is_admin = 1) AND pending_approval = 0
       ORDER BY created_at DESC
     `);
-    const dozenten = stmt.all();
     res.json(dozenten);
   } catch (error) {
     console.error('Fehler beim Abrufen der Dozenten:', error);
@@ -225,7 +212,7 @@ adminRouter.get('/users/dozenten', requireAdmin, async (req, res) => {
 // Alle offenen Abgaben abrufen (Admin kann alle bewerten)
 adminRouter.get('/submissions', requireAdmin, async (req, res) => {
   try {
-    const submissions = db.prepare(`
+    const submissions = await db.all(`
       SELECT cq.*, c.name as character_name, c.level,
              u.id as user_id, u.username,
              q.title as quest_title, q.created_by_user_id,
@@ -237,7 +224,7 @@ adminRouter.get('/submissions', requireAdmin, async (req, res) => {
       LEFT JOIN users du ON q.created_by_user_id = du.id
       WHERE cq.submitted_at IS NOT NULL AND cq.grade IS NULL
       ORDER BY cq.submitted_at DESC
-    `).all();
+    `);
     
     res.json(submissions);
   } catch (error) {
@@ -267,30 +254,28 @@ adminRouter.post('/submissions/:submissionId/grade', requireAdmin, async (req, r
     }
     
     // Abgabe als bewertet markieren
-    const updateStmt = db.prepare(`
+    await db.run(`
       UPDATE character_quests
-      SET grade = ?, feedback = ?, graded_at = datetime('now'), 
-          graded_by_user_id = ?, status = ?,
-          completed_at = CASE WHEN ? = 'approved' THEN datetime('now') ELSE NULL END
-      WHERE id = ?
-    `);
-    updateStmt.run(
-      grade, 
-      feedback, 
-      admin_user_id, 
-      grade === 'approved' ? 'completed' : 'rejected',
+      SET grade = $1, feedback = $2, graded_at = (now()::text), 
+          graded_by_user_id = $3, status = $4,
+          completed_at = CASE WHEN $1 = 'approved' THEN (now()::text) ELSE NULL END
+      WHERE id = $5
+    `, [
       grade,
+      feedback,
+      admin_user_id,
+      grade === 'approved' ? 'completed' : 'rejected',
       submissionId
-    );
+    ]);
     
     // Quest-Informationen abrufen für Belohnungen
-    const submission: any = db.prepare(`
+    const submission: any = await db.get(`
       SELECT cq.*, q.*, c.id as character_id, c.xp as current_xp, c.level as current_level, c.xp_to_next_level
       FROM character_quests cq
       JOIN quests q ON cq.quest_id = q.id
       JOIN characters c ON cq.character_id = c.id
-      WHERE cq.id = ?
-    `).get(submissionId);
+      WHERE cq.id = $1
+    `, [submissionId]);
     
     if (!submission) {
       return res.status(404).json({ error: 'Abgabe nicht gefunden' });
@@ -327,58 +312,120 @@ adminRouter.post('/submissions/:submissionId/grade', requireAdmin, async (req, r
       }
       
       // Belohnungen vergeben mit Level-Up
-      const rewardStmt = db.prepare(`
+      await db.run(`
         UPDATE characters
-        SET xp = ?,
-            level = ?,
-            xp_to_next_level = ?,
-            programmierung = MIN(programmierung + ?, 100),
-            netzwerke = MIN(netzwerke + ?, 100),
-            datenbanken = MIN(datenbanken + ?, 100),
-            hardware = MIN(hardware + ?, 100),
-            sicherheit = MIN(sicherheit + ?, 100),
-            projektmanagement = MIN(projektmanagement + ?, 100),
-            updated_at = datetime('now')
-        WHERE id = ?
-      `);
-      rewardStmt.run(
+        SET xp = $1,
+            level = $2,
+            xp_to_next_level = $3,
+            programmierung = LEAST(programmierung + $4, 100),
+            netzwerke = LEAST(netzwerke + $5, 100),
+            datenbanken = LEAST(datenbanken + $6, 100),
+            hardware = LEAST(hardware + $7, 100),
+            sicherheit = LEAST(sicherheit + $8, 100),
+            projektmanagement = LEAST(projektmanagement + $9, 100),
+            updated_at = (now()::text)
+        WHERE id = $10
+      `, [
         newXp, newLevel, xpToNext,
         finalProg, finalNetz, finalDB, finalHW, finalSec, finalPM,
         submission.character_id
-      );
+      ]);
       
       // Titel vergeben falls Titel-Quest
       if (submission.is_title_quest && submission.title_reward) {
-        const addTitleStmt = db.prepare(`
-          INSERT OR IGNORE INTO character_titles (character_id, title, is_active)
-          VALUES (?, ?, 0)
-        `);
-        addTitleStmt.run(submission.character_id, submission.title_reward);
-        
-        const titleStmt = db.prepare('UPDATE characters SET title = ? WHERE id = ?');
-        titleStmt.run(submission.title_reward, submission.character_id);
-        
-        const activateTitleStmt = db.prepare(`
-          UPDATE character_titles 
-          SET is_active = 1 
-          WHERE character_id = ? AND title = ?
-        `);
-        activateTitleStmt.run(submission.character_id, submission.title_reward);
+        await db.run(
+          `INSERT INTO character_titles (character_id, title, is_active)
+           VALUES ($1, $2, 0)
+           ON CONFLICT DO NOTHING`,
+          [submission.character_id, submission.title_reward]
+        );
+
+        await db.run('UPDATE characters SET title = $1 WHERE id = $2', [submission.title_reward, submission.character_id]);
+
+        await db.run(
+          `UPDATE character_titles 
+           SET is_active = 1 
+           WHERE character_id = $1 AND title = $2`,
+          [submission.character_id, submission.title_reward]
+        );
       }
       
       // Equipment vergeben falls vorhanden
       if (submission.equipment_reward_id) {
-        const equipStmt = db.prepare(`
-          INSERT OR IGNORE INTO character_equipment (character_id, equipment_id, equipped)
-          VALUES (?, ?, 0)
-        `);
-        equipStmt.run(submission.character_id, submission.equipment_reward_id);
+        await db.run(
+          `INSERT INTO character_equipment (character_id, equipment_id, equipped)
+           VALUES ($1, $2, 0)
+           ON CONFLICT DO NOTHING`,
+          [submission.character_id, submission.equipment_reward_id]
+        );
       }
+
+      // Quest ins Quest-Log verschieben
+      await db.run(`
+        INSERT INTO quest_log (character_id, quest_id, quest_title, quest_description, completed_at, xp_earned, grade, feedback)
+        VALUES ($1, $2, $3, $4, now(), $5, $6, $7)
+      `, [
+        submission.character_id,
+        submission.quest_id,
+        submission.title,
+        submission.description,
+        finalXP,
+        grade,
+        feedback
+      ]);
     }
     
     res.json({ message: 'Abgabe erfolgreich bewertet' });
   } catch (error) {
     console.error('Fehler beim Bewerten der Abgabe:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Passwort eines Benutzers ändern (nur Super-Admin)
+adminRouter.put('/users/:userId/password', requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { newPassword, adminUserId } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Passwort muss mindestens 6 Zeichen lang sein' });
+    }
+
+    if (!adminUserId) {
+      return res.status(400).json({ error: 'Admin User ID erforderlich' });
+    }
+
+    // Prüfe, ob der Admin ein Super-Admin ist
+    const admin: any = await db.get('SELECT is_super_admin FROM users WHERE id = $1', [adminUserId]);
+    if (!admin || !admin.is_super_admin) {
+      return res.status(403).json({ error: 'Nur Super-Admins können Passwörter ändern' });
+    }
+
+    // Prüfe, ob User existiert
+    const user: any = await db.get('SELECT id, username FROM users WHERE id = $1', [userId]);
+    if (!user) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    // Passwort hashen
+    const bcrypt = require('bcrypt');
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Passwort aktualisieren
+    await db.run(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [hashedPassword, userId]
+    );
+
+    console.log(`✅ Super-Admin ${adminUserId} hat das Passwort für User ${userId} (${user.username}) geändert`);
+
+    res.json({ 
+      message: 'Passwort erfolgreich geändert',
+      username: user.username
+    });
+  } catch (error) {
+    console.error('Fehler beim Ändern des Passworts:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });

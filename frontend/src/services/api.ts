@@ -70,3 +70,16 @@ export const authAPI = {
     api.post('/auth/login', data),
   getUser: (userId: number) => api.get(`/auth/me/${userId}`),
 };
+
+// Journal API
+export const journalAPI = {
+  getByCharacter: (characterId: number) => api.get(`/journal/character/${characterId}`),
+  create: (characterId: number, data: { entry_text: string; quest_id?: number; mood?: string }) => 
+    api.post(`/journal/character/${characterId}`, data),
+  update: (entryId: number, data: { entry_text: string; mood?: string }) => 
+    api.put(`/journal/${entryId}`, data),
+  delete: (entryId: number) => api.delete(`/journal/${entryId}`),
+  getQuestLog: (characterId: number) => api.get(`/journal/questlog/${characterId}`),
+  addReflection: (logId: number, reflection: string) => 
+    api.put(`/journal/questlog/${logId}/reflection`, { reflection }),
+};
