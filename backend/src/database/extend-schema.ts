@@ -1,4 +1,8 @@
-import { db } from './db';
+import Database from 'better-sqlite3';
+import path from 'path';
+
+const dbPath = path.join(__dirname, '..', '..', 'database.sqlite');
+const db = new Database(dbPath);
 
 const addNewColumns = () => {
   try {
@@ -172,9 +176,13 @@ if (require.main === module) {
   try {
     addNewColumns();
     console.log('Migration abgeschlossen');
+    db.close();
+
     process.exit(0);
   } catch (error) {
     console.error('Migration fehlgeschlagen:', error);
+    db.close();
+
     process.exit(1);
   }
 }

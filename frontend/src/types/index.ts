@@ -94,6 +94,33 @@ export interface Quest {
   xp_scaling?: 'fixed' | 'scaled';
 }
 
+export interface JournalEntry {
+  id: number;
+  character_id: number;
+  entry_text: string;
+  entry_date: string;
+  quest_id?: number;
+  quest_title?: string;
+  quest_category?: string;
+  mood?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestLog {
+  id: number;
+  character_id: number;
+  quest_id: number;
+  quest_title: string;
+  quest_description?: string;
+  completed_at: string;
+  xp_earned: number;
+  grade?: string;
+  feedback?: string;
+  reflection?: string;
+  created_at: string;
+}
+
 export interface User {
   id: number;
   username: string;

@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, pool } from './db';
 import bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
@@ -17,7 +17,7 @@ const setupAdmin = async () => {
   console.log('================================================\n');
 
   // Prüfe ob bereits ein Super-Admin existiert
-  const existingSuperAdmin = db.prepare('SELECT id FROM users WHERE is_super_admin = 1').get();
+  const existingSuperAdmin = await db.get('SELECT id FROM users WHERE is_super_admin = 1');
   
   if (existingSuperAdmin) {
     console.log('✅ Ein Super-Admin existiert bereits!');
@@ -41,7 +41,7 @@ const setupAdmin = async () => {
   }
 
   // Prüfe ob Username bereits existiert
-  const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existingUser = await db.get('SELECT id FROM users WHERE username = $1', [username]);
   if (existingUser) {
     console.log('❌ Dieser Benutzername existiert bereits!');
     rl.close();
@@ -69,13 +69,14 @@ const setupAdmin = async () => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Super-Admin erstellen
-    const result = db.prepare(`
+    const result = await db.get(`
       INSERT INTO users (username, password_hash, is_admin, is_super_admin)
-      VALUES (?, ?, 1, 1)
-    `).run(username, passwordHash);
+      VALUES ($1, $2, 1, 1)
+      RETURNING id
+    `, [username, passwordHash]);
 
     console.log('\n✅ Super-Admin erfolgreich erstellt!');
-    console.log(`   User-ID: ${result.lastInsertRowid}`);
+    console.log(`   User-ID: ${result?.id}`);
     console.log(`   Username: ${username}`);
     console.log('\n⚠️  Dieser Account kann nicht gelöscht werden.');
     console.log('================================================\n');
@@ -84,6 +85,7 @@ const setupAdmin = async () => {
     process.exit(1);
   } finally {
     rl.close();
+    await pool.end();
   }
 };
 

@@ -50,7 +50,8 @@ export default function Quests() {
     if (filter === 'available') return quest.status === 'available';
     if (filter === 'in_progress') return quest.status === 'in_progress';
     if (filter === 'completed') return quest.status === 'completed';
-    return quest.category === filter;
+    // Vergleiche case-insensitive und auch mit großem Anfangsbuchstaben
+    return quest.category?.toLowerCase() === filter.toLowerCase();
   });
 
   if (loading) {
@@ -72,32 +73,56 @@ export default function Quests() {
 
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-        <div className="flex flex-wrap gap-2">
-          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle
-          </FilterButton>
-          <FilterButton active={filter === 'available'} onClick={() => setFilter('available')}>
-            Verfügbar
-          </FilterButton>
-          <FilterButton active={filter === 'in_progress'} onClick={() => setFilter('in_progress')}>
-            In Bearbeitung
-          </FilterButton>
-          <FilterButton active={filter === 'completed'} onClick={() => setFilter('completed')}>
-            Abgeschlossen
-          </FilterButton>
-          <div className="border-l mx-2"></div>
-          <FilterButton active={filter === 'programmierung'} onClick={() => setFilter('programmierung')}>
-            💻 Programmierung
-          </FilterButton>
-          <FilterButton active={filter === 'netzwerke'} onClick={() => setFilter('netzwerke')}>
-            🌐 Netzwerke
-          </FilterButton>
-          <FilterButton active={filter === 'datenbanken'} onClick={() => setFilter('datenbanken')}>
-            🗄️ Datenbanken
-          </FilterButton>
-          <FilterButton active={filter === 'sicherheit'} onClick={() => setFilter('sicherheit')}>
-            🔒 Sicherheit
-          </FilterButton>
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Status Filter Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+              Alle
+            </FilterButton>
+            <FilterButton active={filter === 'available'} onClick={() => setFilter('available')}>
+              Verfügbar
+            </FilterButton>
+            <FilterButton active={filter === 'in_progress'} onClick={() => setFilter('in_progress')}>
+              In Bearbeitung
+            </FilterButton>
+            <FilterButton active={filter === 'completed'} onClick={() => setFilter('completed')}>
+              Abgeschlossen
+            </FilterButton>
+          </div>
+
+          <div className="border-l h-8"></div>
+
+          {/* Kategorie Dropdown */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Kategorie:</label>
+            <select
+              value={['programmierung', 'netzwerke', 'datenbanken', 'hardware', 'sicherheit', 'projektmanagement'].includes(filter) ? filter : ''}
+              onChange={(e) => setFilter(e.target.value || 'all')}
+              className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                ['programmierung', 'netzwerke', 'datenbanken', 'hardware', 'sicherheit', 'projektmanagement'].includes(filter)
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-gray-300 bg-white text-gray-700'
+              }`}
+            >
+              <option value="">-- Alle Kategorien --</option>
+              <option value="programmierung">💻 Programmierung</option>
+              <option value="netzwerke">🌐 Netzwerke</option>
+              <option value="datenbanken">🗄️ Datenbanken</option>
+              <option value="sicherheit">🔒 Sicherheit</option>
+              <option value="hardware">⚙️ Hardware</option>
+              <option value="projektmanagement">📊 Projektmanagement</option>
+            </select>
+          </div>
+
+          {/* Filter zurücksetzen Button */}
+          {filter !== 'all' && (
+            <button
+              onClick={() => setFilter('all')}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              ✕ Filter zurücksetzen
+            </button>
+          )}
         </div>
       </div>
 

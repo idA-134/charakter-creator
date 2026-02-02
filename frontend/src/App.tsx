@@ -15,6 +15,7 @@ import SubmissionReview from './pages/SubmissionReview';
 import GroupManagement from './pages/GroupManagement';
 import Inventory from './pages/Inventory';
 import EquipmentManagement from './pages/EquipmentManagement';
+import Journal from './pages/Journal';
 import Navigation from './components/Navigation';
 
 function App() {
@@ -99,6 +100,10 @@ function App() {
           <Route 
             path="/dozent/equipment" 
             element={user?.role === 'dozent' || user?.isAdmin ? <EquipmentManagement /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/journal/:characterId" 
+            element={user ? <Journal /> : <Navigate to="/login" />} 
           />
           <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
         </Routes>

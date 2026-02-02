@@ -10,7 +10,7 @@ export default function CreateQuest() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: 'Programmierung',
+    category: '',
     difficulty: 'easy',
     xp_scaling: 'scaled',
     xp_reward: 0,
@@ -32,6 +32,43 @@ export default function CreateQuest() {
     repeat_day_of_week: 1,
     repeat_day_of_month: 1
   });
+
+  // Berechne vorgeschlagene Punkte basierend auf Kategorie und Schwierigkeit
+  const getRecommendedPoints = (difficulty: string): number => {
+    switch (difficulty) {
+      case 'easy':
+        return 2;
+      case 'medium':
+        return 4;
+      case 'hard':
+        return 6;
+      default:
+        return 0;
+    }
+  };
+
+  // Wenn Category oder Difficulty ändert, setze vorgeschlagene Werte
+  const handleCategoryOrDifficultyChange = (updatedData: any) => {
+    const recommendedPoints = getRecommendedPoints(updatedData.difficulty);
+    const categoryToAttributeMap: Record<string, string> = {
+      'Programmierung': 'programmierung_reward',
+      'Netzwerke': 'netzwerke_reward',
+      'Datenbanken': 'datenbanken_reward',
+      'Hardware': 'hardware_reward',
+      'Sicherheit': 'sicherheit_reward',
+      'Projektmanagement': 'projektmanagement_reward',
+    };
+
+    const attributeKey = categoryToAttributeMap[updatedData.category];
+    if (attributeKey) {
+      setFormData({
+        ...updatedData,
+        [attributeKey]: recommendedPoints
+      });
+    } else {
+      setFormData(updatedData);
+    }
+  };
 
   useEffect(() => {
     loadEquipment();
@@ -99,15 +136,16 @@ export default function CreateQuest() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Kategorie</label>
             <select
               value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              onChange={(e) => handleCategoryOrDifficultyChange({ ...formData, category: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2"
             >
-              <option>Programmierung</option>
-              <option>Netzwerke</option>
-              <option>Datenbanken</option>
-              <option>Hardware</option>
-              <option>Sicherheit</option>
-              <option>Projektmanagement</option>
+              <option value="">-- Keine Kategorie --</option>
+              <option value="Programmierung">Programmierung</option>
+              <option value="Netzwerke">Netzwerke</option>
+              <option value="Datenbanken">Datenbanken</option>
+              <option value="Hardware">Hardware</option>
+              <option value="Sicherheit">Sicherheit</option>
+              <option value="Projektmanagement">Projektmanagement</option>
             </select>
           </div>
           
@@ -115,7 +153,7 @@ export default function CreateQuest() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Schwierigkeit</label>
             <select
               value={formData.difficulty}
-              onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+              onChange={(e) => handleCategoryOrDifficultyChange({ ...formData, difficulty: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2"
             >
               <option value="easy">Einfach (50 XP)</option>
@@ -296,6 +334,9 @@ export default function CreateQuest() {
         
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-3">Skill-Belohnungen</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            💡 Vorschlagswerte basierend auf Kategorie und Schwierigkeit. Sie können diese Werte jederzeit anpassen.
+          </p>
           <div className="grid grid-cols-3 gap-4">
             {['programmierung', 'netzwerke', 'datenbanken', 'hardware', 'sicherheit', 'projektmanagement'].map((skill) => (
               <div key={skill}>

@@ -8,8 +8,7 @@ export const characterRouter = Router();
 characterRouter.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const stmt = db.prepare('SELECT * FROM characters WHERE user_id = ? ORDER BY created_at DESC');
-    const characters = stmt.all(userId);
+    const characters = await db.all('SELECT * FROM characters WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
     res.json(characters);
   } catch (error) {
     console.error('Fehler beim Abrufen der Characters:', error);
@@ -21,8 +20,7 @@ characterRouter.get('/user/:userId', async (req, res) => {
 characterRouter.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const stmt = db.prepare('SELECT * FROM characters WHERE id = ?');
-    const character = stmt.get(id);
+    const character = await db.get('SELECT * FROM characters WHERE id = $1', [id]);
     
     if (!character) {
       return res.status(404).json({ error: 'Character nicht gefunden' });
@@ -100,14 +98,14 @@ characterRouter.post('/', async (req, res) => {
       }
     }
 
-    const stmt = db.prepare(`
+    const newCharacter = await db.get(`
       INSERT INTO characters (
         user_id, name, backstory,
         programmierung, netzwerke, datenbanken, hardware, sicherheit, projektmanagement
       ) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
-    `);
-    const info = stmt.run(
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `, [
       user_id,
       name,
       trimmedBackstory,
@@ -117,9 +115,7 @@ characterRouter.post('/', async (req, res) => {
       attributes.hardware,
       attributes.sicherheit,
       attributes.projektmanagement
-    );
-    
-    const newCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(info.lastInsertRowid);
+    ]);
     res.status(201).json(newCharacter);
   } catch (error) {
     console.error('Fehler beim Erstellen des Characters:', error);
@@ -133,17 +129,15 @@ characterRouter.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, title, backstory } = req.body;
     
-    const stmt = db.prepare(`
+    const updatedCharacter = await db.get(`
       UPDATE characters 
-      SET name = COALESCE(?, name),
-          title = COALESCE(?, title),
-          backstory = COALESCE(?, backstory),
-          updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    stmt.run(name, title, backstory, id);
-    
-    const updatedCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
+      SET name = COALESCE($1, name),
+          title = COALESCE($2, title),
+          backstory = COALESCE($3, backstory),
+          updated_at = (now()::text)
+      WHERE id = $4
+      RETURNING *
+    `, [name, title, backstory, id]);
     if (!updatedCharacter) {
       return res.status(404).json({ error: 'Character nicht gefunden' });
     }
@@ -166,8 +160,7 @@ characterRouter.post('/:id/xp', async (req, res) => {
     }
     
     // Character abrufen
-    const charStmt = db.prepare('SELECT * FROM characters WHERE id = ?');
-    const character: any = charStmt.get(id);
+    const character: any = await db.get('SELECT * FROM characters WHERE id = $1', [id]);
     
     if (!character) {
       return res.status(404).json({ error: 'Character nicht gefunden' });
@@ -192,14 +185,12 @@ characterRouter.post('/:id/xp', async (req, res) => {
     }
     
     // Character aktualisieren
-    const updateStmt = db.prepare(`
+    const updatedCharacter = await db.get(`
       UPDATE characters 
-      SET xp = ?, level = ?, xp_to_next_level = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    updateStmt.run(newXp, newLevel, xpToNext, id);
-    
-    const updatedCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
+      SET xp = $1, level = $2, xp_to_next_level = $3, updated_at = (now()::text)
+      WHERE id = $4
+      RETURNING *
+    `, [newXp, newLevel, xpToNext, id]);
     res.json(updatedCharacter);
   } catch (error) {
     console.error('Fehler beim Hinzufügen von XP:', error);
@@ -223,15 +214,13 @@ characterRouter.post('/:id/attribute', async (req, res) => {
       return res.status(400).json({ error: 'Gültige Menge erforderlich' });
     }
     
-    const stmt = db.prepare(`
+    const updatedCharacter = await db.get(`
       UPDATE characters 
-      SET ${attribute} = MIN(${attribute} + ?, 100),
-          updated_at = datetime('now')
-      WHERE id = ?
-    `);
-    stmt.run(amount, id);
-    
-    const updatedCharacter = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
+      SET ${attribute} = LEAST(${attribute} + $1, 100),
+          updated_at = (now()::text)
+      WHERE id = $2
+      RETURNING *
+    `, [amount, id]);
     if (!updatedCharacter) {
       return res.status(404).json({ error: 'Character nicht gefunden' });
     }
@@ -247,14 +236,13 @@ characterRouter.post('/:id/attribute', async (req, res) => {
 characterRouter.get('/:id/equipment', async (req, res) => {
   try {
     const { id } = req.params;
-    const stmt = db.prepare(`
+    const equipment = await db.all(`
       SELECT e.*, ce.equipped, ce.acquired_at
       FROM equipment e
       JOIN character_equipment ce ON e.id = ce.equipment_id
-      WHERE ce.character_id = ?
+      WHERE ce.character_id = $1
       ORDER BY ce.equipped DESC, e.rarity DESC
-    `);
-    const equipment = stmt.all(id);
+    `, [id]);
     res.json(equipment);
   } catch (error) {
     console.error('Fehler beim Abrufen des Inventars:', error);
@@ -267,21 +255,16 @@ characterRouter.post('/:id/equipment/:equipmentId/toggle', async (req, res) => {
   try {
     const { id, equipmentId } = req.params;
     
-    const stmt = db.prepare(`
+    const updatedEquipment = await db.get(`
       UPDATE character_equipment
-      SET equipped = NOT equipped
-      WHERE character_id = ? AND equipment_id = ?
-    `);
-    const info = stmt.run(id, equipmentId);
+      SET equipped = CASE WHEN equipped = 1 THEN 0 ELSE 1 END
+      WHERE character_id = $1 AND equipment_id = $2
+      RETURNING *
+    `, [id, equipmentId]);
     
-    if (info.changes === 0) {
+    if (!updatedEquipment) {
       return res.status(404).json({ error: 'Equipment nicht im Inventar' });
     }
-    
-    const updatedEquipment = db.prepare(`
-      SELECT * FROM character_equipment
-      WHERE character_id = ? AND equipment_id = ?
-    `).get(id, equipmentId);
     
     res.json(updatedEquipment);
   } catch (error) {
@@ -294,10 +277,9 @@ characterRouter.post('/:id/equipment/:equipmentId/toggle', async (req, res) => {
 characterRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const stmt = db.prepare('DELETE FROM characters WHERE id = ?');
-    const info = stmt.run(id);
+    const result = await db.run('DELETE FROM characters WHERE id = $1', [id]);
     
-    if (info.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Character nicht gefunden' });
     }
     

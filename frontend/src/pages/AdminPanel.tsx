@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api } from '../services/api';
 
 export default function AdminPanel() {
@@ -6,6 +6,9 @@ export default function AdminPanel() {
   const [pendingDozenten, setPendingDozenten] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
+  const [changingPasswordUserId, setChangingPasswordUserId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -81,9 +84,40 @@ export default function AdminPanel() {
     }
   };
 
+  const changePassword = async (userId: number) => {
+    setPasswordError('');
+    
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError('Passwort muss mindestens 6 Zeichen lang sein');
+      return;
+    }
+
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.isSuperAdmin) {
+      alert('Nur Super-Admins können Passwörter ändern');
+      return;
+    }
+
+    try {
+      const response = await api.put(`/admin/users/${userId}/password`, {
+        newPassword,
+        adminUserId: user.id
+      });
+      
+      alert(`Passwort für ${response.data.username} erfolgreich geändert!`);
+      setChangingPasswordUserId(null);
+      setNewPassword('');
+    } catch (error: any) {
+      console.error('Fehler beim Ändern des Passworts:', error);
+      setPasswordError(error.response?.data?.error || 'Fehler beim Ändern des Passworts');
+    }
+  };
+
   if (loading) {
     return <div className="p-8">Lade Daten...</div>;
   }
+
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   return (
     <div className="max-w-7xl mx-auto p-8">
@@ -212,7 +246,8 @@ export default function AdminPanel() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.id}>
+                  <Fragment key={user.id}>
+                    <tr>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.id}
                     </td>
@@ -255,7 +290,19 @@ export default function AdminPanel() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString('de-DE')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      {currentUser.isSuperAdmin && user.is_super_admin !== 1 && (
+                        <button
+                          onClick={() => {
+                            setChangingPasswordUserId(user.id);
+                            setNewPassword('');
+                            setPasswordError('');
+                          }}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Passwort
+                        </button>
+                      )}
                       {user.is_super_admin !== 1 && (
                         <button
                           onClick={() => deleteUser(user.id)}
@@ -265,7 +312,49 @@ export default function AdminPanel() {
                         </button>
                       )}
                     </td>
-                  </tr>
+                    </tr>
+                    {changingPasswordUserId === user.id && (
+                      <tr>
+                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                        <div className="max-w-md">
+                          <h4 className="font-semibold text-gray-900 mb-3">
+                            Passwort ändern für: {user.username}
+                          </h4>
+                          <div className="space-y-3">
+                            <input
+                              type="password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Neues Passwort (min. 6 Zeichen)"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                            />
+                            {passwordError && (
+                              <p className="text-red-600 text-sm">{passwordError}</p>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => changePassword(user.id)}
+                                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg"
+                              >
+                                Passwort ändern
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setChangingPasswordUserId(null);
+                                  setNewPassword('');
+                                  setPasswordError('');
+                                }}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                              >
+                                Abbrechen
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

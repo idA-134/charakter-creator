@@ -108,6 +108,12 @@ export default function CharacterDetail() {
                 📜 Quests
               </Link>
               <Link
+                to={`/journal/${character.id}`}
+                className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-center"
+              >
+                📖 Tagebuch
+              </Link>
+              <Link
                 to={`/achievements/${character.id}`}
                 className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-center"
               >
@@ -148,6 +154,14 @@ export default function CharacterDetail() {
           </div>
         </div>
       </div>
+
+      {/* Backstory */}
+      {character.backstory && (
+        <div className="mt-6 bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">📜 Hintergrundgeschichte</h2>
+          <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{character.backstory}</p>
+        </div>
+      )}
     </div>
   );
 }
