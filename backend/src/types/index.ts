@@ -151,3 +151,14 @@ export interface QuestAssignment {
   group_id?: number;
   assigned_at: Date;
 }
+
+export interface QuestResource {
+  id: number;
+  quest_id: number;
+  file_url: string;
+  original_name: string;
+  mime_type?: string;
+  size?: number;
+  uploaded_by_user_id?: number;
+  uploaded_at?: Date;
+}

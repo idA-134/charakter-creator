@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { questAPI, characterAPI, api } from '../services/api'; 
 import { Quest, Character } from '../types';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function Quests() {
   const { characterId } = useParams<{ characterId: string }>();
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -168,6 +170,10 @@ function QuestCard({ quest, onStart, onReload }: any) {
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
   const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [showResources, setShowResources] = useState(false);
+  const [resources, setResources] = useState<any[]>([]);
+  const [resourcesLoaded, setResourcesLoaded] = useState(false);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
   
   const difficultyColors = {
     easy: 'bg-green-100 text-green-800',
@@ -298,6 +304,27 @@ function QuestCard({ quest, onStart, onReload }: any) {
       alert(errorMsg);
     }
   };
+
+  const loadResources = async () => {
+    try {
+      setResourcesLoading(true);
+      const res = await api.get(`/quests/${quest.id}/resources`);
+      setResources(res.data || []);
+      setResourcesLoaded(true);
+    } catch (error) {
+      console.error('Fehler beim Laden der Ressourcen:', error);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  const toggleResources = async () => {
+    const next = !showResources;
+    setShowResources(next);
+    if (next && !resourcesLoaded) {
+      await loadResources();
+    }
+  };
   
   const getStatusText = () => {
     if (quest.status === 'in_progress') return 'In Bearbeitung';
@@ -330,6 +357,60 @@ function QuestCard({ quest, onStart, onReload }: any) {
       </div>
 
       <p className="text-gray-600 mb-4">{quest.description}</p>
+
+      <div className="mb-4">
+        <button
+          onClick={toggleResources}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {showResources ? 'Ressourcen ausblenden' : 'Ressourcen anzeigen'}
+        </button>
+        {showResources && (
+          <div className="mt-3 bg-gray-50 rounded-lg p-4">
+            {resourcesLoading ? (
+              <p className="text-sm text-gray-500">Lade Ressourcen...</p>
+            ) : resources.length === 0 ? (
+              <p className="text-sm text-gray-500">Keine Ressourcen vorhanden</p>
+            ) : (
+              <div className="space-y-4">
+                {resources.map((res) => (
+                  <div key={res.id} className="bg-white border rounded-lg p-3">
+                    {res.mime_type?.startsWith('video/') ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">🎬 {res.original_name}</p>
+                        <video
+                          controls
+                          className="w-full max-h-64 rounded"
+                          src={`${API_BASE_URL}/${res.file_url}`}
+                        />
+                        <a
+                          href={`${API_BASE_URL}/${res.file_url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          Datei herunterladen
+                        </a>
+                      </div>
+                    ) : (
+                      <a
+                        href={`${API_BASE_URL}/${res.file_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        📥 {res.original_name}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="border-t pt-4 mb-4">
         <div className="text-sm font-bold text-gray-700 mb-2">🎁 Belohnungen:</div>

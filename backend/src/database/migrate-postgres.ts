@@ -12,6 +12,7 @@ async function createTables() {
 
     if (process.env.DB_RESET === 'true') {
       console.log('⚠️  DB_RESET=true -> Lösche bestehende Tabellen...');
+      await db.query(`DROP TABLE IF EXISTS quest_resources CASCADE`);
       await db.query(`DROP TABLE IF EXISTS quest_submissions CASCADE`);
       await db.query(`DROP TABLE IF EXISTS notifications CASCADE`);
       await db.query(`DROP TABLE IF EXISTS character_titles CASCADE`);
@@ -266,6 +267,23 @@ async function createTables() {
         created_at TEXT DEFAULT (now()::text),
         read_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Quest Resources
+    console.log('📋 Erstelle quest_resources Tabelle...');
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS quest_resources (
+        id SERIAL PRIMARY KEY,
+        quest_id INTEGER NOT NULL,
+        file_url TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER,
+        uploaded_by_user_id INTEGER,
+        uploaded_at TEXT DEFAULT (now()::text),
+        FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE,
+        FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
 

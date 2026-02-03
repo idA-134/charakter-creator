@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function ManageQuests() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [quests, setQuests] = useState<any[]>([]);
@@ -9,6 +11,9 @@ export default function ManageQuests() {
   const [users, setUsers] = useState<any[]>([]);
   const [editingQuest, setEditingQuest] = useState<any | null>(null);
   const [equipment, setEquipment] = useState<any[]>([]);
+  const [questResources, setQuestResources] = useState<any[]>([]);
+  const [resourceFiles, setResourceFiles] = useState<File[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -73,6 +78,65 @@ export default function ManageQuests() {
     } catch (error) {
       console.error('Fehler beim Aktualisieren:', error);
       alert('Fehler beim Aktualisieren der Quest');
+    }
+  };
+
+  const loadResources = async (questId: number) => {
+    try {
+      setResourcesLoading(true);
+      const res = await api.get(`/quests/${questId}/resources`);
+      setQuestResources(res.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Ressourcen:', error);
+      setQuestResources([]);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (editingQuest?.id) {
+      loadResources(editingQuest.id);
+    } else {
+      setQuestResources([]);
+    }
+  }, [editingQuest]);
+
+  const uploadResources = async () => {
+    if (!editingQuest || resourceFiles.length === 0) {
+      return;
+    }
+
+    try {
+      const filesData = new FormData();
+      resourceFiles.forEach((file) => filesData.append('files', file));
+      filesData.append('uploaded_by_user_id', String(user.id));
+
+      await api.post(`/dozent/quests/${editingQuest.id}/resources`, filesData);
+
+      setResourceFiles([]);
+      await loadResources(editingQuest.id);
+      alert('Ressourcen erfolgreich hochgeladen!');
+    } catch (error: any) {
+      console.error('Fehler beim Hochladen der Ressourcen:', error);
+      const errorMsg = error.response?.data?.error || 'Fehler beim Hochladen der Ressourcen';
+      alert(errorMsg);
+    }
+  };
+
+  const deleteResource = async (resourceId: number) => {
+    if (!confirm('Ressource wirklich löschen?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/dozent/quests/resources/${resourceId}`);
+      if (editingQuest) {
+        await loadResources(editingQuest.id);
+      }
+    } catch (error) {
+      console.error('Fehler beim Löschen der Ressource:', error);
+      alert('Fehler beim Löschen der Ressource');
     }
   };
 
@@ -195,6 +259,54 @@ export default function ManageQuests() {
                   rows={4}
                   className="w-full border rounded px-3 py-2"
                 />
+              </div>
+
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">📎 Ressourcen</h4>
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => setResourceFiles(e.target.files ? Array.from(e.target.files) : [])}
+                    className="w-full border border-gray-300 rounded px-3 py-2 bg-white"
+                  />
+                  <button
+                    onClick={uploadResources}
+                    disabled={resourceFiles.length === 0}
+                    className="self-start px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                  >
+                    Ressourcen hochladen
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  {resourcesLoading ? (
+                    <p className="text-sm text-gray-500">Lade Ressourcen...</p>
+                  ) : questResources.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine Ressourcen vorhanden</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {questResources.map((res) => (
+                        <li key={res.id} className="flex items-center justify-between gap-3">
+                          <a
+                            href={`${API_BASE_URL}/${res.file_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline text-sm"
+                          >
+                            {res.original_name}
+                          </a>
+                          <button
+                            onClick={() => deleteResource(res.id)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            Löschen
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">

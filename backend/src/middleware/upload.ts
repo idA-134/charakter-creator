@@ -2,26 +2,11 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Erstelle Upload-Ordner falls nicht vorhanden
-const uploadDir = path.join(process.cwd(), 'uploads', 'submissions');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Konfiguriere Multer Storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Generiere eindeutigen Dateinamen: timestamp-originalname
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const nameWithoutExt = path.basename(file.originalname, ext);
-    const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, `${sanitizedName}-${uniqueSuffix}${ext}`);
+const ensureDir = (dir: string) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-});
+};
 
 // Datei-Filter: Nur bestimmte Dateitypen erlauben
 const fileFilter = (req: any, file: any, cb: any) => {
@@ -76,14 +61,36 @@ const fileFilter = (req: any, file: any, cb: any) => {
   }
 };
 
-// Multer-Konfiguration
-export const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // Max 10 MB
-  }
-});
+const buildStorage = (uploadDir: string) =>
+  multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      // Generiere eindeutigen Dateinamen: timestamp-originalname
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname);
+      const nameWithoutExt = path.basename(file.originalname, ext);
+      const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_');
+      cb(null, `${sanitizedName}-${uniqueSuffix}${ext}`);
+    }
+  });
+
+export const createUpload = (subDir: string, maxFileSizeMB: number = 10) => {
+  const uploadDir = path.join(process.cwd(), 'uploads', subDir);
+  ensureDir(uploadDir);
+
+  return multer({
+    storage: buildStorage(uploadDir),
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: maxFileSizeMB * 1024 * 1024,
+    }
+  });
+};
+
+// Standard Upload (Abgaben)
+export const upload = createUpload('submissions', 10);
 
 // Hilfsfunktion zum Löschen von Dateien
 export const deleteFile = (filePath: string): void => {

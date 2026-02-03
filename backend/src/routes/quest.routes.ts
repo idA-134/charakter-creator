@@ -177,6 +177,25 @@ questRouter.get('/character/:characterId', async (req, res) => {
   }
 });
 
+// Ressourcen einer Quest abrufen (Dateien/Videos)
+questRouter.get('/:questId/resources', async (req, res) => {
+  try {
+    const { questId } = req.params;
+
+    const resources = await db.all(`
+      SELECT id, quest_id, file_url, original_name, mime_type, size, uploaded_at
+      FROM quest_resources
+      WHERE quest_id = $1
+      ORDER BY uploaded_at DESC
+    `, [questId]);
+
+    res.json(resources);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Quest-Ressourcen:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
 // Quest starten
 questRouter.post('/:questId/start', async (req, res) => {
   try {

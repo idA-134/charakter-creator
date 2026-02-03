@@ -6,6 +6,7 @@ export default function CreateQuest() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [equipment, setEquipment] = useState<any[]>([]);
+  const [resourceFiles, setResourceFiles] = useState<File[]>([]);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -87,7 +88,7 @@ export default function CreateQuest() {
     e.preventDefault();
     
     try {
-      await api.post('/dozent/quests', {
+      const questRes = await api.post('/dozent/quests', {
         ...formData,
         equipment_reward_id: formData.equipment_reward_id || null,
         required_equipment_id: formData.required_equipment_id || null,
@@ -95,12 +96,21 @@ export default function CreateQuest() {
         due_date: formData.due_date || null,
         created_by_user_id: user.id
       });
+
+      if (resourceFiles.length > 0) {
+        const filesData = new FormData();
+        resourceFiles.forEach((file) => filesData.append('files', file));
+        filesData.append('uploaded_by_user_id', String(user.id));
+
+        await api.post(`/dozent/quests/${questRes.data.id}/resources`, filesData);
+      }
       
       alert('Quest erfolgreich erstellt!');
       navigate('/dozent/quests');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fehler beim Erstellen der Quest:', error);
-      alert('Fehler beim Erstellen der Quest');
+      const errorMsg = error.response?.data?.error || 'Fehler beim Erstellen der Quest';
+      alert(errorMsg);
     }
   };
 
@@ -129,6 +139,21 @@ export default function CreateQuest() {
             rows={4}
             className="w-full border border-gray-300 rounded-lg px-4 py-2"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            📎 Ressourcen (Videos/Dateien, optional)
+          </label>
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setResourceFiles(e.target.files ? Array.from(e.target.files) : [])}
+            className="w-full border border-gray-300 rounded-lg px-4 py-2"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Mehrere Dateien möglich. Videos werden im Quest angezeigt, andere Dateien als Download.
+          </p>
         </div>
         
         <div className="grid grid-cols-3 gap-4">

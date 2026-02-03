@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../database/db';
 import { createNotification } from './notification.routes';
+import { createUpload, deleteFile, getAbsolutePath, getRelativePath } from '../middleware/upload';
 
 export const dozentRouter = Router();
 
@@ -8,6 +9,8 @@ export const dozentRouter = Router();
 const requireDozent = (req: any, res: any, next: any) => {
   next();
 };
+
+const questResourceUpload = createUpload('quest-resources', 250);
 
 /**
  * Berechnet skalierte XP basierend auf Mindestlevel der Quest
@@ -154,6 +157,72 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
     res.status(201).json(newQuest);
   } catch (error) {
     console.error('Fehler beim Erstellen der Quest:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Quest-Ressourcen (Dateien/Videos) hochladen
+dozentRouter.post('/quests/:questId/resources', requireDozent, questResourceUpload.array('files', 10), async (req, res) => {
+  try {
+    const { questId } = req.params;
+    const uploadedBy = req.body.uploaded_by_user_id ? Number(req.body.uploaded_by_user_id) : null;
+    const files = (req.files as Express.Multer.File[]) || [];
+
+    if (!files.length) {
+      return res.status(400).json({ error: 'Keine Dateien hochgeladen' });
+    }
+
+    const quest = await db.get('SELECT id FROM quests WHERE id = $1', [questId]);
+    if (!quest) {
+      return res.status(404).json({ error: 'Quest nicht gefunden' });
+    }
+
+    const inserted: any[] = [];
+    for (const file of files) {
+      const fileUrl = getRelativePath(file.path);
+      const result = await db.get(`
+        INSERT INTO quest_resources (quest_id, file_url, original_name, mime_type, size, uploaded_by_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `, [questId, fileUrl, file.originalname, file.mimetype, file.size, uploadedBy]);
+      if (result) {
+        inserted.push(result);
+      }
+    }
+
+    res.status(201).json(inserted);
+  } catch (error: any) {
+    const message = typeof error?.message === 'string' ? error.message : 'Interner Serverfehler';
+    console.error('Fehler beim Hochladen der Quest-Ressourcen:', error);
+
+    if (message.includes('quest_resources') || message.includes('no such table')) {
+      return res.status(500).json({
+        error: 'Tabelle quest_resources fehlt. Bitte Migration ausführen.'
+      });
+    }
+
+    res.status(500).json({ error: message });
+  }
+});
+
+// Quest-Ressource löschen
+dozentRouter.delete('/quests/resources/:resourceId', requireDozent, async (req, res) => {
+  try {
+    const { resourceId } = req.params;
+
+    const resource: any = await db.get('SELECT * FROM quest_resources WHERE id = $1', [resourceId]);
+    if (!resource) {
+      return res.status(404).json({ error: 'Ressource nicht gefunden' });
+    }
+
+    await db.run('DELETE FROM quest_resources WHERE id = $1', [resourceId]);
+    if (resource.file_url) {
+      deleteFile(getAbsolutePath(resource.file_url));
+    }
+
+    res.json({ message: 'Ressource gelöscht' });
+  } catch (error) {
+    console.error('Fehler beim Löschen der Quest-Ressource:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
