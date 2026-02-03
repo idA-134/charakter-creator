@@ -92,6 +92,17 @@ export interface Quest {
   repeat_day_of_month?: number;
   due_date?: string;
   xp_scaling?: 'fixed' | 'scaled';
+  resources?: QuestResource[];
+}
+
+export interface QuestResource {
+  id: number;
+  quest_id: number;
+  file_url: string;
+  original_name: string;
+  mime_type?: string | null;
+  size?: number | null;
+  uploaded_at?: string | null;
 }
 
 export interface JournalEntry {

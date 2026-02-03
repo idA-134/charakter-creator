@@ -21,8 +21,8 @@ export default function SubmissionReview() {
       const allSubRes = await api.get('/dozent/submissions/all');
       console.log('All submissions:', allSubRes.data);
       
-      // Filtere ungradierten Abgaben
-      const ungraded = allSubRes.data.filter(s => !s.grade);
+      // Filtere ungradierten Abgaben (nur submitted, nicht yet graded)
+      const ungraded = allSubRes.data.filter((s: any) => s.submitted_at && !s.graded_at);
       console.log('Ungraded submissions:', ungraded);
       setSubmissions(ungraded);
     } catch (error) {

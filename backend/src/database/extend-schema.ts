@@ -163,6 +163,22 @@ const addNewColumns = () => {
       )
     `);
     console.log('✅ character_titles Tabelle erstellt');
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS quest_resources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quest_id INTEGER NOT NULL,
+        file_url TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER,
+        uploaded_by_user_id INTEGER,
+        uploaded_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE,
+        FOREIGN KEY (uploaded_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('✅ quest_resources Tabelle erstellt');
     
     console.log('\n✅ Datenbank-Schema erfolgreich erweitert!');
   } catch (error) {

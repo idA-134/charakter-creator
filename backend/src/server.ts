@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import multer from 'multer';
 
 dotenv.config();
 
@@ -79,8 +80,12 @@ console.log('✓ All routes configured');
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('❌ Error:', err.message);
-  res.status(500).json({ error: 'Internal Server Error' });
+  const isMulterError = err instanceof multer.MulterError;
+  const isBadRequest = isMulterError || (typeof err?.message === 'string' && err.message.includes('Dateityp nicht erlaubt'));
+  const status = isBadRequest ? 400 : 500;
+
+  console.error('❌ Error:', err.message || err);
+  res.status(status).json({ error: err.message || 'Internal Server Error' });
 });
 
 // 404 handler
