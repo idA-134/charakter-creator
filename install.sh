@@ -83,15 +83,6 @@ else
     print_success "Das Buch der Pakete liegt bereit: $NPM_VERSION"
 fi
 
-# SQLite3 installieren (falls benötigt)
-if ! command -v sqlite3 &> /dev/null; then
-    print_info "Erschaffe die Bibliothek des Wissens (SQLite3)..."
-    apt-get install -y sqlite3 libsqlite3-dev
-    print_success "Die Bibliothek des Wissens steht nun bereit!"
-else
-    print_success "Die Bibliothek des Wissens existiert bereits!"
-fi
-
 print_quest "Die Akademie errichten"
 
 APP_DIR="/opt/charakter-creation"
@@ -122,7 +113,7 @@ print_info "Konfiguriere Umgebungsvariablen..."
 if [ ! -f "$APP_DIR/backend/.env" ]; then
     cat > $APP_DIR/backend/.env << EOF
 # Database
-DATABASE_URL=./database.sqlite
+DATABASE_URL=postgresql://charakter:DEIN_PASSWORT_HIER@localhost:5432/charakter_db
 
 # Server
 PORT=3000
@@ -180,7 +171,7 @@ print_success "Die Backend-Magie ist nun einsatzbereit!"
 print_quest "Die Datenbank der Weisen erschaffen"
 print_info "Erschaffe die Chroniken, in denen alle Heldentaten verzeichnet werden..."
 cd $APP_DIR/backend
-sudo -u $APP_USER node dist/database/migrate.js
+sudo -u $APP_USER node dist/database/migrate-postgres.js
 print_success "Die Datenbank der Weisen wurde erschaffen!"
 
 print_info "Erschaffe den Großmeister der Akademie..."

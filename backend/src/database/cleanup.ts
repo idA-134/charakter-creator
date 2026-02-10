@@ -35,8 +35,19 @@ const cleanup = async () => {
     console.log('Lösche alle Users außer Super Admin...');
     await db.run(`DELETE FROM users WHERE id != $1`, [superAdminId]);
     
+    console.log('Setze Auto-Increment Sequences zurück...');
+    // Setze alle Sequences so, dass der nächste ID-Wert 2 ist (nach dem Super Admin mit ID 1)
+    await db.run(`SELECT setval('users_id_seq', 2, false)`);
+    await db.run(`SELECT setval('characters_id_seq', 1, false)`);
+    await db.run(`SELECT setval('quests_id_seq', 1, false)`);
+    await db.run(`SELECT setval('groups_id_seq', 1, false)`);
+    await db.run(`SELECT setval('equipment_id_seq', 1, false)`);
+    await db.run(`SELECT setval('achievements_id_seq', 1, false)`);
+    await db.run(`SELECT setval('notifications_id_seq', 1, false)`);
+    
     console.log('\n✅ Datenbank erfolgreich bereinigt!');
     console.log(`✅ Super Admin (ID: ${superAdminId}) bleibt erhalten`);
+    console.log(`✅ Nächster User startet mit ID: 2`);
     
   } catch (error) {
     console.error('❌ Fehler beim Bereinigen:', error);

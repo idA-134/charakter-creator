@@ -75,11 +75,11 @@ node -v  # Zeigt Version: z.B. v20.11.0
 - **Warum wichtig?** Damit können wir hunderte kleine Hilfsprogramme automatisch installieren.
 - **Kommt mit:** Node.js (wird automatisch mitinstalliert)
 
-##### 3. **SQLite3** (Die Bibliothek des Wissens)
+##### 3. **PostgreSQL** (Die Bibliothek des Wissens)
 
-- **Was ist das?** Eine Datenbank - ein Ort, wo alle Informationen gespeichert werden (Benutzer, Charaktere, Quests, etc.)
+- **Was ist das?** Eine relationale Datenbank - ein Ort, wo alle Informationen gespeichert werden (Benutzer, Charaktere, Quests, etc.)
 - **Warum wichtig?** Ohne Datenbank hätten wir keinen Speicher für die Spielerdaten.
-- **Besonderheit:** SQLite ist sehr einfach - keine komplexe Installation nötig!
+- **Besonderheit:** PostgreSQL ist robust, skalierbar und für den Serverbetrieb geeignet.
 
 ---
 
@@ -96,7 +96,6 @@ Wir erstellen einen speziellen Ort auf dem Server, wo unsere Anwendung "wohnt".
 ├── backend/                     ← Server-Teil (API)
 │   ├── src/                     ← Quellcode
 │   ├── dist/                    ← Kompilierter Code
-│   └── database.sqlite          ← Die Datenbank-Datei
 └── frontend/                    ← Website-Teil
     ├── src/                     ← Quellcode
     └── dist/                    ← Fertige Webseite
@@ -124,7 +123,7 @@ Wir erstellen Konfigurationsdateien (`.env` Dateien) mit wichtigen Einstellungen
 #### 🔐 Backend-Runen (`backend/.env`)
 
 ```env
-DATABASE_URL=./database.sqlite      # Wo ist die Datenbank?
+DATABASE_URL=postgresql://charakter:DEIN_PASSWORT_HIER@localhost:5432/charakter_db
 PORT=3000                           # Auf welchem Port läuft der Server?
 NODE_ENV=production                 # Produktionsmodus (nicht Entwicklung)
 JWT_SECRET=xyz123...                # Geheimer Schlüssel für Login-Sicherheit
@@ -172,7 +171,7 @@ npm install --production
 **Was wird installiert?**
 
 - **Express:** Der Webserver (nimmt Anfragen entgegen)
-- **SQLite3:** Datenbankanbindung
+- **PostgreSQL:** Datenbankanbindung
 - **JWT:** Für sichere Logins
 - **Bcrypt:** Verschlüsselt Passwörter
 - **Cors:** Erlaubt Browser-Zugriffe
@@ -304,7 +303,7 @@ Die Datenbank wird angelegt und mit Tabellen gefüllt.
 #### 🗃️ Datenbank-Migration
 
 ```bash
-node dist/database/migrate.js
+node dist/database/migrate-postgres.js
 ```
 
 **Was ist eine Migration?**
@@ -648,7 +647,7 @@ sudo ufw enable                 # Aktiviere Firewall
 **Datenbank sichern:**
 ```bash
 cd /opt/charakter-creation/backend
-sudo -u charakter cp database.sqlite database.sqlite.backup
+sudo -u charakter pg_dump "$DATABASE_URL" > backup-$(date +%Y%m%d).sql
 ```
 
 **Automatisches Backup (täglich):**
@@ -657,8 +656,8 @@ sudo -u charakter cp database.sqlite database.sqlite.backup
 sudo crontab -e
 
 # Füge hinzu (jeden Tag um 3 Uhr nachts):
-0 3 * * * cp /opt/charakter-creation/backend/database.sqlite \
-          /opt/charakter-creation/backend/backup-$(date +\%Y\%m\%d).sqlite
+0 3 * * * pg_dump "postgresql://charakter:DEIN_PASSWORT_HIER@localhost:5432/charakter_db" \
+          > /opt/charakter-creation/backend/backup-$(date +\%Y\%m\%d).sql
 ```
 
 ---
@@ -728,7 +727,7 @@ sudo tail -f /var/log/nginx/error.log
 3. **Admin-Benutzer existiert?**
    ```bash
    cd /opt/charakter-creation/backend
-   sudo -u charakter sqlite3 database.sqlite "SELECT * FROM users WHERE role='admin';"
+   sudo -u charakter psql "$DATABASE_URL" -c "SELECT * FROM users WHERE role='admin';"
    ```
 
 ---

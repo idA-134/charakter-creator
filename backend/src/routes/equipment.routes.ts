@@ -17,21 +17,36 @@ equipmentRouter.get('/', async (req, res) => {
 // Equipment erstellen (Dozent/Admin)
 equipmentRouter.post('/', async (req, res) => {
   try {
-    const { name, description, rarity } = req.body;
+    const { name, description, rarity, type } = req.body;
+    
+    console.log('📦 Equipment POST request:', { name, description, rarity, type });
     
     if (!name) {
       return res.status(400).json({ error: 'Name ist erforderlich' });
     }
     
-    const newEquipment = await db.get(`
-      INSERT INTO equipment (name, description, rarity)
-      VALUES ($1, $2, $3)
+    const query = `
+      INSERT INTO equipment (name, description, rarity, type, programmierung_bonus, netzwerke_bonus, datenbanken_bonus, hardware_bonus, sicherheit_bonus, projektmanagement_bonus, min_level)
+      VALUES ($1, $2, $3, $4, 0, 0, 0, 0, 0, 0, 1)
       RETURNING *
-    `, [name, description, rarity || 'common']);
+    `;
+    
+    console.log('🔍 SQL Query:', query);
+    console.log('📊 Params:', [name, description, rarity || 'common', type || 'misc']);
+    
+    const newEquipment = await db.get(query, [name, description, rarity || 'common', type || 'misc']);
+    
+    console.log('✅ Equipment erstellt:', newEquipment);
     res.status(201).json(newEquipment);
   } catch (error) {
-    console.error('Fehler beim Erstellen des Equipment:', error);
-    res.status(500).json({ error: 'Interner Serverfehler' });
+    console.error('❌ Fehler beim Erstellen des Equipment:', error);
+    const errorMsg = (error as any)?.message || 'Unbekannter Fehler';
+    const details = (error as any)?.detail || '';
+    console.error('📋 Details:', details);
+    res.status(500).json({ 
+      error: `Interner Serverfehler: ${errorMsg}`,
+      details: details
+    });
   }
 });
 

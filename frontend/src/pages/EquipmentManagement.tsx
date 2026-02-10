@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { api } from '../services/api';
 
 interface Equipment {
   id: number;
@@ -18,7 +18,8 @@ export default function EquipmentManagement() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    rarity: 'common' as Equipment['rarity']
+    rarity: 'common' as Equipment['rarity'],
+    type: 'misc'
   });
 
   useEffect(() => {
@@ -27,10 +28,7 @@ export default function EquipmentManagement() {
 
   const loadEquipment = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:3000/api/equipment', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/equipment');
       setEquipment(response.data);
     } catch (error) {
       console.error('Fehler beim Laden der Equipment:', error);
@@ -49,18 +47,19 @@ export default function EquipmentManagement() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:3000/api/equipment', formData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      console.log('Sende Equipment-Daten:', formData);
+      const response = await api.post('/equipment', formData);
+      console.log('Equipment erstellt:', response.data);
       
       alert('Equipment erfolgreich erstellt!');
-      setFormData({ name: '', description: '', rarity: 'common' });
+      setFormData({ name: '', description: '', rarity: 'common', type: 'misc' });
       setShowForm(false);
       loadEquipment();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fehler beim Erstellen:', error);
-      alert('Fehler beim Erstellen des Equipment');
+      console.error('Fehler-Response:', error.response);
+      const errorMsg = error.response?.data?.error || error.message || 'Fehler beim Erstellen des Equipment';
+      alert('Fehler: ' + errorMsg);
     }
   };
 
@@ -70,10 +69,7 @@ export default function EquipmentManagement() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:3000/api/equipment/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/equipment/${id}`);
       
       alert('Equipment erfolgreich gelöscht!');
       loadEquipment();
@@ -177,6 +173,23 @@ export default function EquipmentManagement() {
                 <option value="rare">Selten</option>
                 <option value="epic">Episch</option>
                 <option value="legendary">Legendär</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Typ
+              </label>
+              <select
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="misc">Sonstiges</option>
+                <option value="weapon">Waffe</option>
+                <option value="armor">Rüstung</option>
+                <option value="tool">Werkzeug</option>
+                <option value="accessory">Accessoire</option>
               </select>
             </div>
 

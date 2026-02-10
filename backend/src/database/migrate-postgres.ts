@@ -8,7 +8,7 @@ import { db, pool } from './db';
 
 async function createTables() {
   try {
-    console.log('🚀 Starte PostgreSQL Schema Migration (SQLite kompatibel)...\n');
+    console.log('🚀 Starte PostgreSQL Schema Migration...\n');
 
     if (process.env.DB_RESET === 'true') {
       console.log('⚠️  DB_RESET=true -> Lösche bestehende Tabellen...');
