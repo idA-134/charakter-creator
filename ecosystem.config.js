@@ -16,7 +16,7 @@ module.exports = {
       script: './backend/dist/server.js',
       cwd: 'C:\\Users\\mario\\Desktop\\GitHub\\charakter_creation',
       
-      // Single instance (kein Cluster wegen SQLite)
+      // Single instance
       instances: 1,
       exec_mode: 'fork',
       

@@ -42,7 +42,7 @@ achievementRouter.post('/character/:characterId/check', async (req, res) => {
     const { characterId } = req.params;
     const newAchievements: any[] = [];
     
-    // SQLite Transaction
+    // Transaction
     await db.transaction(async (client) => {
       const characterResult = await client.query('SELECT * FROM characters WHERE id = $1', [characterId]);
       const character = characterResult.rows[0] as any;

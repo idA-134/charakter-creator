@@ -248,7 +248,7 @@ questRouter.post('/:questId/start', async (req, res) => {
       }
     }
     
-    // SQLite: INSERT OR REPLACE für UPSERT
+    // UPSERT
     await db.run(
       `INSERT INTO character_quests (character_id, quest_id, status, started_at)
        VALUES ($1, $2, 'in_progress', (now()::text))
@@ -356,7 +356,7 @@ questRouter.post('/:questId/complete', async (req, res) => {
       return res.status(400).json({ error: 'characterId erforderlich' });
     }
     
-    // SQLite Transaction
+    // Transaction
     const { quest, character } = await db.transaction(async (client) => {
       const questResult = await client.query('SELECT * FROM quests WHERE id = $1', [questId]);
       const quest = questResult.rows[0] as any;

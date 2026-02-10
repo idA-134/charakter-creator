@@ -11,6 +11,7 @@ interface Props {
 export default function Dashboard({ user }: Props) {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
+  const MAX_CHARACTERS = 1;
 
   useEffect(() => {
     loadCharacters();
@@ -42,12 +43,14 @@ export default function Dashboard({ user }: Props) {
           <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600 mt-2">Willkommen zurück, {user.username}!</p>
         </div>
-        <Link
-          to="/character/create"
-          className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-        >
-          + Neuer Charakter
-        </Link>
+        {characters.length < MAX_CHARACTERS && (
+          <Link
+            to="/character/create"
+            className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+          >
+            + Neuer Charakter
+          </Link>
+        )}
       </div>
 
       {characters.length === 0 ? (
@@ -65,6 +68,14 @@ export default function Dashboard({ user }: Props) {
           >
             Charakter erstellen
           </Link>
+        </div>
+      ) : characters.length >= MAX_CHARACTERS ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {characters.map((character) => (
+            <Link key={character.id} to={`/character/${character.id}`}>
+              <CharacterCard character={character} />
+            </Link>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

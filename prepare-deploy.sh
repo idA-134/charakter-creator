@@ -35,12 +35,6 @@ rm -rf frontend/dist/
 rm -rf frontend/build/
 print_success "Build-Verzeichnisse gelöscht"
 
-print_info "Lösche Datenbank-Dateien..."
-rm -rf backend/*.sqlite
-rm -rf backend/*.db
-rm -rf backend/database.sqlite-journal
-print_success "Datenbank-Dateien gelöscht"
-
 print_info "Lösche .env Dateien..."
 rm -f backend/.env
 rm -f frontend/.env
