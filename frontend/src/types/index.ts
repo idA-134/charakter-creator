@@ -74,6 +74,7 @@ export interface Quest {
   min_level: number;
   prerequisite_quest_id?: number;
   created_by_user_id?: number;
+  created_by_username?: string;
   
   status?: 'available' | 'in_progress' | 'submitted' | 'completed';
   started_at?: string;

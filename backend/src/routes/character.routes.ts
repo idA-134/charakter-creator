@@ -40,6 +40,7 @@ characterRouter.post('/', async (req, res) => {
       user_id,
       name,
       backstory,
+      group_id,
       programmierung,
       netzwerke,
       datenbanken,
@@ -50,6 +51,19 @@ characterRouter.post('/', async (req, res) => {
     
     if (!user_id || !name) {
       return res.status(400).json({ error: 'user_id und name sind erforderlich' });
+    }
+
+    let groupId: number | null = null;
+    if (group_id !== undefined && group_id !== null && group_id !== '') {
+      groupId = Number(group_id);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ error: 'group_id muss eine Zahl sein' });
+      }
+
+      const group = await db.get('SELECT id FROM groups WHERE id = $1', [groupId]);
+      if (!group) {
+        return res.status(400).json({ error: 'Gruppe nicht gefunden' });
+      }
     }
     
     const trimmedBackstory = typeof backstory === 'string' ? backstory.trim() : null;
@@ -116,6 +130,15 @@ characterRouter.post('/', async (req, res) => {
       attributes.sicherheit,
       attributes.projektmanagement
     ]);
+
+    if (groupId) {
+      await db.run(
+        `INSERT INTO group_members (group_id, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [groupId, user_id]
+      );
+    }
     res.status(201).json(newCharacter);
   } catch (error) {
     console.error('Fehler beim Erstellen des Characters:', error);

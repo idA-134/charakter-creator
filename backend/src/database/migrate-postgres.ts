@@ -162,15 +162,27 @@ async function createTables() {
         repeat_time TEXT,
         repeat_day_of_week INTEGER,
         repeat_day_of_month INTEGER,
+        approval_status TEXT DEFAULT 'pending',
+        approval_requested_at TEXT,
+        approved_at TEXT,
+        approved_by_user_id INTEGER,
+        approval_feedback TEXT,
         created_at TEXT DEFAULT (now()::text),
         FOREIGN KEY (prerequisite_quest_id) REFERENCES quests(id) ON DELETE SET NULL,
         FOREIGN KEY (equipment_reward_id) REFERENCES equipment(id) ON DELETE SET NULL,
-        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
 
     // Sicherstellen, dass required_equipment_id auch bei bestehenden DBs existiert
     await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS required_equipment_id INTEGER`);
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'pending'`);
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS approval_requested_at TEXT`);
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS approved_at TEXT`);
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS approved_by_user_id INTEGER`);
+    await db.query(`ALTER TABLE quests ADD COLUMN IF NOT EXISTS approval_feedback TEXT`);
+    await db.query(`UPDATE quests SET approval_status = 'approved' WHERE approval_status IS NULL`);
 
     // Character Quests
     console.log('📋 Erstelle character_quests Tabelle...');
@@ -223,6 +235,38 @@ async function createTables() {
         UNIQUE(group_id, user_id)
       )
     `);
+
+    const adminUsers = await db.all(`
+      SELECT id
+      FROM users
+      WHERE is_super_admin = 1 OR is_admin = 1 OR role = 'admin'
+      ORDER BY id ASC
+    `);
+
+    if (adminUsers.length > 0) {
+      const existingAdminsGroup: any = await db.get(`SELECT id FROM groups WHERE name = 'Admins'`);
+      let adminsGroupId = existingAdminsGroup?.id as number | undefined;
+
+      if (!adminsGroupId) {
+        const createdGroup: any = await db.get(`
+          INSERT INTO groups (name, description, created_by_user_id)
+          VALUES ('Admins', 'Systemgruppe fuer Admins', $1)
+          RETURNING id
+        `, [adminUsers[0].id]);
+        adminsGroupId = createdGroup?.id;
+      }
+
+      if (adminsGroupId) {
+        for (const admin of adminUsers as any[]) {
+          await db.run(
+            `INSERT INTO group_members (group_id, user_id)
+             VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [adminsGroupId, admin.id]
+          );
+        }
+      }
+    }
 
     // Quest-Zuweisungen
     console.log('📋 Erstelle quest_assignments Tabelle...');

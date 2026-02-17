@@ -2,6 +2,8 @@
 
 ## Übersicht
 
+Das nachfolgende Dokument wurde von Mario Schamp geschrieben. Es ist zum Zwecke der Gamification Nutzung innerhalb des LernLab IT zu verwenden und darf nicht reproduziert werden.
+
 Das XP-System wurde erweitert, um **Quests mit höherem Mindestlevel automatisch mehr XP zu geben**. Dies sorgt für ein ausgewogenes Spielerlebnis, bei dem fortgeschrittene Spieler angemessen belohnt werden.
 
 ---

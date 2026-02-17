@@ -17,7 +17,7 @@ Nachwuchskräfte können Tagebuch-Einträge erstellen mit:
   - 🎉 Stolz
   - 😤 Frustriert
   - 💪 Selbstbewusst
-  - 📚 Am Lernen
+  - 📚 Überfordert
 
 ### ✅ Quest-Log
 

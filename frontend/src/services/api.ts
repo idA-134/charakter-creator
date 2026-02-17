@@ -25,6 +25,7 @@ export const characterAPI = {
     user_id: number;
     name: string;
     backstory?: string;
+    group_id?: number;
     programmierung?: number;
     netzwerke?: number;
     datenbanken?: number;
@@ -40,6 +41,12 @@ export const characterAPI = {
   toggleEquipment: (characterId: number, equipmentId: number) => 
     api.post(`/characters/${characterId}/equipment/${equipmentId}/toggle`),
   delete: (id: number) => api.delete(`/characters/${id}`),
+};
+
+// Group API
+export const groupAPI = {
+  getPublic: () => api.get('/groups/public'),
+  getAll: () => api.get('/groups')
 };
 
 // Quest API

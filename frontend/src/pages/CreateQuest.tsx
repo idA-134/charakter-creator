@@ -117,6 +117,10 @@ export default function CreateQuest() {
   return (
     <div className="max-w-4xl mx-auto p-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Quest erstellen</h1>
+
+      <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+        Hinweis: Neue Quests muessen zuerst an die Gruppe "Admins" geteilt werden, damit sie freigegeben werden.
+      </div>
       
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 space-y-6">
         <div>

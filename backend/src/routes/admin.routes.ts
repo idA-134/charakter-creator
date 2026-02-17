@@ -4,6 +4,66 @@ import { createNotification } from './notification.routes';
 
 export const adminRouter = Router();
 
+const ADMIN_GROUP_NAME = 'Admins';
+
+const getAdminsGroupId = async (createIfMissing: boolean, createdByUserId?: number): Promise<number | null> => {
+  const existing: any = await db.get('SELECT id FROM groups WHERE name = $1', [ADMIN_GROUP_NAME]);
+  if (existing?.id) {
+    return existing.id;
+  }
+
+  if (!createIfMissing || !createdByUserId) {
+    return null;
+  }
+
+  const created: any = await db.get(
+    'INSERT INTO groups (name, description, created_by_user_id) VALUES ($1, $2, $3) RETURNING id',
+    [ADMIN_GROUP_NAME, 'Systemgruppe fuer Admins', createdByUserId]
+  );
+  return created?.id ?? null;
+};
+
+const syncAdminGroupMembership = async (userId: number, shouldBeAdmin: boolean) => {
+  const groupId = await getAdminsGroupId(shouldBeAdmin, userId);
+  if (!groupId) {
+    return;
+  }
+
+  if (shouldBeAdmin) {
+    await db.run(
+      `INSERT INTO group_members (group_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [groupId, userId]
+    );
+  } else {
+    await db.run('DELETE FROM group_members WHERE group_id = $1 AND user_id = $2', [groupId, userId]);
+  }
+};
+
+const getUserAccess = async (userId: number | null | undefined) => {
+  if (!userId) {
+    return null;
+  }
+
+  const user: any = await db.get(
+    'SELECT id, role, is_admin, is_super_admin FROM users WHERE id = $1',
+    [userId]
+  );
+  return user || null;
+};
+
+const isFullAdmin = (user: any) => {
+  if (!user) return false;
+  return user.is_super_admin === 1 || (user.role === 'admin' && user.is_admin === 1);
+};
+
+const canReviewQuests = (user: any) => {
+  if (!user) return false;
+  if (user.is_super_admin === 1) return true;
+  return user.is_admin === 1 && (user.role === 'admin' || user.role === 'dozent');
+};
+
 // Middleware: Nur Admin/Super-Admin
 const requireAdmin = (req: any, res: any, next: any) => {
   // In Produktion: JWT Token prüfen
@@ -14,6 +74,11 @@ const requireAdmin = (req: any, res: any, next: any) => {
 // Alle User abrufen
 adminRouter.get('/users', requireAdmin, async (req, res) => {
   try {
+    const requester = await getUserAccess(Number(req.query.admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+
     const users = await db.all(`
       SELECT id, username, role, is_admin, is_super_admin, pending_approval, created_at 
       FROM users 
@@ -29,6 +94,11 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
 // Alle ausstehenden Dozenten-Genehmigungen abrufen
 adminRouter.get('/pending-dozenten', requireAdmin, async (req, res) => {
   try {
+    const requester = await getUserAccess(Number(req.query.admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+
     const dozenten = await db.all(`
       SELECT id, username, role, pending_approval, created_at 
       FROM users 
@@ -46,6 +116,10 @@ adminRouter.get('/pending-dozenten', requireAdmin, async (req, res) => {
 adminRouter.post('/approve-dozent/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
+    const requester = await getUserAccess(Number(req.body.admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
     
     // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
     const user: any = await db.get('SELECT * FROM users WHERE id = $1 AND role = $2 AND pending_approval = $3', [userId, 'dozent', 1]);
@@ -80,6 +154,10 @@ adminRouter.post('/approve-dozent/:userId', requireAdmin, async (req, res) => {
 adminRouter.post('/reject-dozent/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
+    const requester = await getUserAccess(Number(req.body.admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
     
     // Prüfe, ob User ein Dozent mit ausstehender Genehmigung ist
     const user: any = await db.get('SELECT * FROM users WHERE id = $1 AND role = $2 AND pending_approval = $3', [userId, 'dozent', 1]);
@@ -102,7 +180,12 @@ adminRouter.post('/reject-dozent/:userId', requireAdmin, async (req, res) => {
 adminRouter.put('/users/:userId/role', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { role } = req.body;
+    const { role, admin_user_id } = req.body;
+
+    const requester = await getUserAccess(Number(admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
     
     if (!['nachwuchskraft', 'dozent', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'Ungültige Rolle' });
@@ -119,6 +202,9 @@ adminRouter.put('/users/:userId/role', requireAdmin, async (req, res) => {
     if (!updatedUser) {
       return res.status(404).json({ error: 'User nicht gefunden' });
     }
+
+    const shouldBeAdmin = updatedUser.role === 'admin' || updatedUser.is_admin === 1 || updatedUser.is_super_admin === 1;
+    await syncAdminGroupMembership(Number(userId), shouldBeAdmin);
     
     res.json(updatedUser);
   } catch (error) {
@@ -131,7 +217,12 @@ adminRouter.put('/users/:userId/role', requireAdmin, async (req, res) => {
 adminRouter.put('/users/:userId/admin', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { is_admin } = req.body;
+    const { is_admin, admin_user_id } = req.body;
+
+    const requester = await getUserAccess(Number(admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
     
     // Super-Admin kann nicht geändert werden
     const user: any = await db.get('SELECT is_super_admin FROM users WHERE id = $1', [userId]);
@@ -143,6 +234,11 @@ adminRouter.put('/users/:userId/admin', requireAdmin, async (req, res) => {
       'UPDATE users SET is_admin = $1 WHERE id = $2 RETURNING id, username, role, is_admin, is_super_admin, pending_approval, created_at',
       [is_admin ? 1 : 0, userId]
     );
+
+    if (updatedUser) {
+      const shouldBeAdmin = updatedUser.role === 'admin' || updatedUser.is_admin === 1 || updatedUser.is_super_admin === 1;
+      await syncAdminGroupMembership(Number(userId), shouldBeAdmin);
+    }
     
     res.json(updatedUser);
   } catch (error) {
@@ -151,10 +247,154 @@ adminRouter.put('/users/:userId/admin', requireAdmin, async (req, res) => {
   }
 });
 
+// Quests zur Freigabe abrufen (nur Quests, die an Admins-Gruppe geteilt wurden)
+adminRouter.get('/quests/pending-approval', requireAdmin, async (req, res) => {
+  try {
+    const requester = await getUserAccess(Number(req.query.admin_user_id));
+    if (!canReviewQuests(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+    const adminsGroupId = await getAdminsGroupId(false);
+    if (!adminsGroupId) {
+      return res.json([]);
+    }
+
+    const quests = await db.all(`
+      SELECT q.*, u.username as created_by_username
+      FROM quests q
+      JOIN quest_assignments qa ON qa.quest_id = q.id
+      LEFT JOIN users u ON q.created_by_user_id = u.id
+      WHERE qa.group_id = $1 AND q.approval_status = 'pending'
+      ORDER BY q.approval_requested_at DESC NULLS LAST, q.created_at DESC
+    `, [adminsGroupId]);
+
+    res.json(quests);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Quest-Freigaben:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Quest freigeben
+adminRouter.post('/quests/:questId/approve', requireAdmin, async (req, res) => {
+  try {
+    const { questId } = req.params;
+    const { admin_user_id } = req.body;
+
+    if (!admin_user_id) {
+      return res.status(400).json({ error: 'admin_user_id erforderlich' });
+    }
+
+    const requester = await getUserAccess(Number(admin_user_id));
+    if (!canReviewQuests(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+
+    const adminsGroupId = await getAdminsGroupId(false);
+    if (!adminsGroupId) {
+      return res.status(400).json({ error: 'Admins-Gruppe nicht gefunden' });
+    }
+
+    const assignment = await db.get(
+      'SELECT id FROM quest_assignments WHERE quest_id = $1 AND group_id = $2',
+      [questId, adminsGroupId]
+    );
+    if (!assignment) {
+      return res.status(400).json({ error: 'Quest wurde nicht an die Admins-Gruppe geteilt' });
+    }
+
+    const updatedQuest: any = await db.get(`
+      UPDATE quests
+      SET approval_status = 'approved',
+          approved_at = (now()::text),
+          approved_by_user_id = $1,
+          approval_feedback = NULL
+      WHERE id = $2
+      RETURNING *
+    `, [admin_user_id, questId]);
+
+    if (updatedQuest?.created_by_user_id) {
+      await createNotification(
+        updatedQuest.created_by_user_id,
+        'quest_approved',
+        'Quest freigegeben',
+        `Deine Quest "${updatedQuest.title}" wurde freigegeben.`
+      );
+    }
+
+    res.json(updatedQuest);
+  } catch (error) {
+    console.error('Fehler beim Freigeben der Quest:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Quest ablehnen
+adminRouter.post('/quests/:questId/reject', requireAdmin, async (req, res) => {
+  try {
+    const { questId } = req.params;
+    const { admin_user_id, reason } = req.body;
+
+    if (!admin_user_id) {
+      return res.status(400).json({ error: 'admin_user_id erforderlich' });
+    }
+
+    if (!reason) {
+      return res.status(400).json({ error: 'reason erforderlich' });
+    }
+
+    const requester = await getUserAccess(Number(admin_user_id));
+    if (!canReviewQuests(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+
+    const adminsGroupId = await getAdminsGroupId(false);
+    if (!adminsGroupId) {
+      return res.status(400).json({ error: 'Admins-Gruppe nicht gefunden' });
+    }
+
+    const assignment = await db.get(
+      'SELECT id FROM quest_assignments WHERE quest_id = $1 AND group_id = $2',
+      [questId, adminsGroupId]
+    );
+    if (!assignment) {
+      return res.status(400).json({ error: 'Quest wurde nicht an die Admins-Gruppe geteilt' });
+    }
+
+    const updatedQuest: any = await db.get(`
+      UPDATE quests
+      SET approval_status = 'rejected',
+          approved_at = NULL,
+          approved_by_user_id = $1,
+          approval_feedback = $2
+      WHERE id = $3
+      RETURNING *
+    `, [admin_user_id, reason, questId]);
+
+    if (updatedQuest?.created_by_user_id) {
+      await createNotification(
+        updatedQuest.created_by_user_id,
+        'quest_rejected',
+        'Quest abgelehnt',
+        `Deine Quest "${updatedQuest.title}" wurde abgelehnt: ${reason}`
+      );
+    }
+
+    res.json(updatedQuest);
+  } catch (error) {
+    console.error('Fehler beim Ablehnen der Quest:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
 // User löschen
 adminRouter.delete('/users/:userId', requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
+    const requester = await getUserAccess(Number(req.body.admin_user_id));
+    if (!isFullAdmin(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
     
     // Super-Admin kann nicht gelöscht werden
     const user: any = await db.get('SELECT is_super_admin FROM users WHERE id = $1', [userId]);
@@ -241,6 +481,11 @@ adminRouter.post('/submissions/:submissionId/grade', requireAdmin, async (req, r
     
     if (!grade || !admin_user_id) {
       return res.status(400).json({ error: 'Grade und admin_user_id erforderlich' });
+    }
+
+    const requester = await getUserAccess(Number(admin_user_id));
+    if (!canReviewQuests(requester)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
     }
     
     // Nur 'approved' oder 'rejected' erlaubt
