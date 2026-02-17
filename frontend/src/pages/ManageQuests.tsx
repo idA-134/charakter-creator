@@ -7,6 +7,7 @@ export default function ManageQuests() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [quests, setQuests] = useState<any[]>([]);
   const [selectedQuest, setSelectedQuest] = useState<number | null>(null);
+  const [selectedQuestDetails, setSelectedQuestDetails] = useState<any | null>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [editingQuest, setEditingQuest] = useState<any | null>(null);
@@ -14,6 +15,12 @@ export default function ManageQuests() {
   const [questResources, setQuestResources] = useState<any[]>([]);
   const [resourceFiles, setResourceFiles] = useState<File[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
+
+  const getApprovalLabel = (status: string | null | undefined) => {
+    if (status === 'approved') return 'Freigegeben';
+    if (status === 'rejected') return 'Abgelehnt';
+    return 'Ausstehend';
+  };
 
   useEffect(() => {
     loadData();
@@ -151,6 +158,7 @@ export default function ManageQuests() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Titel</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt von</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schwierigkeit</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Freigabe</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zuweisungen</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Abgaben</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aktionen</th>
@@ -159,9 +167,17 @@ export default function ManageQuests() {
           <tbody className="bg-white divide-y divide-gray-200">
             {quests.map((quest) => (
               <tr key={quest.id}>
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">{quest.title}</td>
+                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                  <button
+                    onClick={() => setSelectedQuestDetails(quest)}
+                    className="text-blue-600 hover:text-blue-900"
+                  >
+                    {quest.title}
+                  </button>
+                </td>
                 <td className="px-6 py-4 text-sm text-gray-500">{quest.created_by_username || 'Unbekannt'}</td>
                 <td className="px-6 py-4 text-sm text-gray-500 capitalize">{quest.difficulty}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{getApprovalLabel(quest.approval_status)}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{quest.assignment_count || 0}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{quest.submission_count || 0}</td>
                 <td className="px-6 py-4 text-sm font-medium space-x-2">
@@ -194,36 +210,61 @@ export default function ManageQuests() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-bold mb-4">Quest zuweisen</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-semibold mb-2">An Gruppe</h4>
-                {groups.map((group) => (
-                  <button
-                    key={group.id}
-                    onClick={() => assignQuest(selectedQuest, 'group', group.id)}
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
-                  >
-                    {group.name} ({group.member_count} Mitglieder)
-                  </button>
-                ))}
-              </div>
-              
-              <div>
-                <h4 className="font-semibold mb-2">An Einzelperson</h4>
-                <div className="max-h-48 overflow-y-auto">
-                  {users.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => assignQuest(selectedQuest, 'user', u.id)}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100 rounded"
-                    >
-                      {u.username}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+
+            {(() => {
+              const selectedQuestData = quests.find((q) => q.id === selectedQuest);
+              const isApproved = selectedQuestData?.approval_status === 'approved';
+              const adminGroup = groups.find((g) => g.name === 'Admins');
+
+              return (
+                <>
+                  {!isApproved && (
+                    <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm">
+                      Quest muss erst von Admins freigegeben werden. Bitte an Gruppe "Admins" senden.
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2">An Gruppe</h4>
+                      {groups.map((group) => {
+                        const isAdminsGroup = group.name === 'Admins';
+                        const isDisabled = !isApproved && !isAdminsGroup;
+                        return (
+                          <button
+                            key={group.id}
+                            onClick={() => assignQuest(selectedQuest, 'group', group.id)}
+                            disabled={isDisabled}
+                            className={`block w-full text-left px-4 py-2 rounded ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                          >
+                            {group.name} ({group.member_count} Mitglieder)
+                          </button>
+                        );
+                      })}
+                      {!adminGroup && (
+                        <p className="text-xs text-red-600 mt-2">Admins-Gruppe nicht gefunden.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold mb-2">An Einzelperson</h4>
+                      <div className="max-h-48 overflow-y-auto">
+                        {users.map((u) => (
+                          <button
+                            key={u.id}
+                            onClick={() => assignQuest(selectedQuest, 'user', u.id)}
+                            disabled={!isApproved}
+                            className={`block w-full text-left px-4 py-2 rounded ${!isApproved ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                          >
+                            {u.username}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
             
             <button
               onClick={() => setSelectedQuest(null)}
@@ -231,6 +272,76 @@ export default function ManageQuests() {
             >
               Schließen
             </button>
+          </div>
+        </div>
+      )}
+
+      {selectedQuestDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">{selectedQuestDetails.title}</h2>
+              <button
+                onClick={() => setSelectedQuestDetails(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Schliessen
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Beschreibung</h3>
+                <p className="text-gray-900 mt-1 whitespace-pre-wrap">{selectedQuestDetails.description}</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Kategorie</h4>
+                  <p className="text-gray-900">{selectedQuestDetails.category || '-'}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Schwierigkeit</h4>
+                  <p className="text-gray-900 capitalize">{selectedQuestDetails.difficulty}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Min. Level</h4>
+                  <p className="text-gray-900">{selectedQuestDetails.min_level}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">XP</h4>
+                  <p className="text-gray-900">{selectedQuestDetails.xp_reward}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Erstellt von</h4>
+                  <p className="text-gray-900">{selectedQuestDetails.created_by_username || 'Unbekannt'}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700">Attribut-Belohnungen</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 text-gray-900 text-sm">
+                  <div>Programmierung: {selectedQuestDetails.programmierung_reward || 0}</div>
+                  <div>Netzwerke: {selectedQuestDetails.netzwerke_reward || 0}</div>
+                  <div>Datenbanken: {selectedQuestDetails.datenbanken_reward || 0}</div>
+                  <div>Hardware: {selectedQuestDetails.hardware_reward || 0}</div>
+                  <div>Sicherheit: {selectedQuestDetails.sicherheit_reward || 0}</div>
+                  <div>Projektmanagement: {selectedQuestDetails.projektmanagement_reward || 0}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setSelectedQuestDetails(null)}
+                className="flex-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300"
+              >
+                Schliessen
+              </button>
+            </div>
           </div>
         </div>
       )}

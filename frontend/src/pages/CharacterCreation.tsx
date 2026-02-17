@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { characterAPI } from '../services/api';
+import { characterAPI, groupAPI } from '../services/api';
+import { Group } from '../types';
 
 interface Props {
   user: any;
@@ -12,6 +13,9 @@ export default function CharacterCreation({ user }: Props) {
   const [error, setError] = useState('');
   const [userCharacters, setUserCharacters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupId, setGroupId] = useState('');
   const navigate = useNavigate();
 
   const MAX_POINTS = 60;
@@ -29,6 +33,7 @@ export default function CharacterCreation({ user }: Props) {
 
   useEffect(() => {
     checkUserCharacters();
+    loadGroups();
   }, []);
 
   const checkUserCharacters = async () => {
@@ -42,6 +47,18 @@ export default function CharacterCreation({ user }: Props) {
       console.error('Fehler beim Überprüfen der Charaktere:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const response = await groupAPI.getPublic();
+      setGroups(response.data);
+    } catch (err) {
+      console.error('Fehler beim Laden der Gruppen:', err);
+      setError('Gruppen konnten nicht geladen werden');
+    } finally {
+      setGroupsLoading(false);
     }
   };
 
@@ -83,11 +100,17 @@ export default function CharacterCreation({ user }: Props) {
       return;
     }
 
+    if (!groupId) {
+      setError('Bitte wähle einen Lehrgang aus');
+      return;
+    }
+
     try {
       const response = await characterAPI.create({
         user_id: user.id,
         name,
         backstory: backstory.trim() || undefined,
+        group_id: Number(groupId),
         programmierung: attributes.programmierung,
         netzwerke: attributes.netzwerke,
         datenbanken: attributes.datenbanken,
@@ -187,6 +210,31 @@ export default function CharacterCreation({ user }: Props) {
             />
             <p className="mt-2 text-sm text-gray-500">
               {backstory.length}/1000 Zeichen
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Lehrgang
+            </label>
+            <select
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              required
+              disabled={groupsLoading}
+            >
+              <option value="">
+                {groupsLoading ? 'Lade Lehrgaenge...' : 'Bitte Lehrgang auswählen'}
+              </option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-sm text-gray-500">
+              Wähle die Gruppe aus, in der du eingeteilt bist
             </p>
           </div>
 

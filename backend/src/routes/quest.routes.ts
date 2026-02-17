@@ -64,7 +64,12 @@ export const questRouter = Router();
 // Alle verfügbaren Quests abrufen
 questRouter.get('/', async (req, res) => {
   try {
-    const result = await db.all('SELECT * FROM quests ORDER BY min_level ASC, difficulty ASC');
+    const result = await db.all(`
+      SELECT q.*, u.username as created_by_username
+      FROM quests q
+      LEFT JOIN users u ON q.created_by_user_id = u.id
+      ORDER BY q.min_level ASC, q.difficulty ASC
+    `);
     res.json(result);
   } catch (error) {
     console.error('Fehler beim Abrufen der Quests:', error);
@@ -90,6 +95,7 @@ questRouter.get('/character/:characterId', async (req, res) => {
     const quests = await db.all(
       `SELECT 
          q.*,
+         u.username as created_by_username,
          cq.status,
          cq.started_at,
          cq.completed_at,
@@ -102,6 +108,7 @@ questRouter.get('/character/:characterId', async (req, res) => {
        FROM quests q
        INNER JOIN character_quests cq ON q.id = cq.quest_id AND cq.character_id = $1
        LEFT JOIN equipment eq ON q.required_equipment_id = eq.id
+       LEFT JOIN users u ON q.created_by_user_id = u.id
        WHERE q.min_level <= $2
        ORDER BY q.min_level ASC, q.difficulty ASC`
     , [characterId, characterLevel]);

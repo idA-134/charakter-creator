@@ -81,6 +81,13 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
     if (!title || !description || !created_by_user_id) {
       return res.status(400).json({ error: 'Title, Description und created_by_user_id sind erforderlich' });
     }
+
+    const creator: any = await db.get(
+      'SELECT role, is_admin, is_super_admin FROM users WHERE id = $1',
+      [created_by_user_id]
+    );
+    const isAdminCreator = !!creator && (creator.role === 'admin' || creator.is_admin === 1 || creator.is_super_admin === 1);
+    const approvalStatus = isAdminCreator ? 'approved' : 'pending';
     
     // Validiere xp_scaling
     const scalingMode = xp_scaling || 'scaled'; // default: scaled
@@ -141,8 +148,9 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
         is_title_quest, title_reward, equipment_reward_id, required_equipment_id,
         min_level, prerequisite_quest_id, created_by_user_id,
         is_repeatable, repeat_interval, due_date,
-        repeat_time, repeat_day_of_week, repeat_day_of_month
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+        repeat_time, repeat_day_of_week, repeat_day_of_month,
+        approval_status, approval_requested_at, approved_at, approved_by_user_id, approval_feedback
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
       RETURNING *
     `, [
       title, description, category, difficulty, finalXP,
@@ -152,7 +160,12 @@ dozentRouter.post('/quests', requireDozent, async (req, res) => {
       equipment_reward_id || null, required_equipment_id || null,
       questMinLevel, prerequisite_quest_id || null, created_by_user_id,
       is_repeatable ? 1 : 0, repeat_interval || null, due_date || null,
-      repeat_time || null, repeat_day_of_week ?? null, repeat_day_of_month ?? null
+      repeat_time || null, repeat_day_of_week ?? null, repeat_day_of_month ?? null,
+      approvalStatus,
+      isAdminCreator ? (new Date().toISOString()) : null,
+      isAdminCreator ? (new Date().toISOString()) : null,
+      isAdminCreator ? created_by_user_id : null,
+      null
     ]);
     res.status(201).json(newQuest);
   } catch (error) {
@@ -241,9 +254,18 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
       return res.status(400).json({ error: 'Nur user_id ODER group_id erlaubt' });
     }
     
-    // Quest-Titel für Notification abrufen
-    const quest: any = await db.get('SELECT title FROM quests WHERE id = $1', [questId]);
+    const adminsGroup: any = await db.get("SELECT id FROM groups WHERE name = 'Admins'");
+    const adminsGroupId = adminsGroup?.id ? Number(adminsGroup.id) : null;
+
+    // Quest-Titel und Freigabe für Notification abrufen
+    const quest: any = await db.get('SELECT title, approval_status FROM quests WHERE id = $1', [questId]);
     const questTitle = quest?.title || 'Unbekannte Quest';
+
+    const isAdminsGroupTarget = group_id && adminsGroupId && Number(group_id) === adminsGroupId;
+
+    if (!isAdminsGroupTarget && quest?.approval_status !== 'approved') {
+      return res.status(403).json({ error: 'Quest muss erst von Admins freigegeben werden' });
+    }
     
     // Zuweisung erstellen
     await db.run(
@@ -252,33 +274,61 @@ dozentRouter.post('/quests/:questId/assign', requireDozent, async (req, res) => 
        ON CONFLICT DO NOTHING`,
       [questId, user_id || null, group_id || null]
     );
+
+    if (isAdminsGroupTarget) {
+      await db.run(
+        `UPDATE quests
+         SET approval_status = 'pending',
+             approval_requested_at = (now()::text)
+         WHERE id = $1 AND approval_status <> 'approved'`,
+        [questId]
+      );
+
+      const adminMembers = await db.all(`
+        SELECT u.id
+        FROM group_members gm
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = $1
+      `, [adminsGroupId]);
+
+      for (const admin of adminMembers as any[]) {
+        await createNotification(
+          admin.id,
+          'quest_review',
+          'Quest zur Pruefung',
+          `Die Quest "${questTitle}" wartet auf Freigabe.`
+        );
+      }
+    }
     
     // Wenn Gruppe: Quest für alle Mitglieder verfügbar machen
     if (group_id) {
-      const members = await db.all(`
-        SELECT u.id, c.id as character_id
-        FROM group_members gm
-        JOIN users u ON gm.user_id = u.id
-        LEFT JOIN characters c ON u.id = c.user_id
-        WHERE gm.group_id = $1
-      `, [group_id]);
-      
-      for (const member of members) {
-        const typedMember = member as any;
-        if (typedMember.character_id) {
-          await db.run(
-            `INSERT INTO character_quests (character_id, quest_id, status)
-             VALUES ($1, $2, 'available')
-             ON CONFLICT DO NOTHING`,
-            [typedMember.character_id, questId]
-          );
-          // Notification an User senden
-          await createNotification(
-            typedMember.id,
-            'quest_assigned',
-            'Neue Quest zugewiesen',
-            `Dir wurde die Quest "${questTitle}" zugewiesen!`
-          );
+      if (!isAdminsGroupTarget) {
+        const members = await db.all(`
+          SELECT u.id, c.id as character_id
+          FROM group_members gm
+          JOIN users u ON gm.user_id = u.id
+          LEFT JOIN characters c ON u.id = c.user_id
+          WHERE gm.group_id = $1
+        `, [group_id]);
+        
+        for (const member of members) {
+          const typedMember = member as any;
+          if (typedMember.character_id) {
+            await db.run(
+              `INSERT INTO character_quests (character_id, quest_id, status)
+               VALUES ($1, $2, 'available')
+               ON CONFLICT DO NOTHING`,
+              [typedMember.character_id, questId]
+            );
+            // Notification an User senden
+            await createNotification(
+              typedMember.id,
+              'quest_assigned',
+              'Neue Quest zugewiesen',
+              `Dir wurde die Quest "${questTitle}" zugewiesen!`
+            );
+          }
         }
       }
     } else {
@@ -560,12 +610,10 @@ dozentRouter.post('/submissions/:submissionId/grade', requireDozent, async (req,
   }
 });
 
-// Alle Quests abrufen (Admin - alle, Dozent - nur eigene)
+// Alle Quests abrufen (Dozent/Admin - alle)
 dozentRouter.get('/quests/all', requireDozent, async (req, res) => {
   try {
-    const { userId, isAdmin } = req.query;
-    
-    let query = `
+    const query = `
       SELECT q.*,
              u.username as created_by_username,
              COUNT(DISTINCT qa.id) as assignment_count,
@@ -574,22 +622,11 @@ dozentRouter.get('/quests/all', requireDozent, async (req, res) => {
       LEFT JOIN users u ON q.created_by_user_id = u.id
       LEFT JOIN quest_assignments qa ON q.id = qa.quest_id
       LEFT JOIN character_quests cq ON q.id = cq.quest_id AND cq.submitted_at IS NOT NULL
-    `;
-    
-    const params: any[] = [];
-    
-    // Admin sieht alle Quests, Dozent nur eigene
-    if (isAdmin !== 'true' && userId) {
-      query += ' WHERE q.created_by_user_id = $1';
-      params.push(userId);
-    }
-    
-    query += `
       GROUP BY q.id, u.username
       ORDER BY q.created_at DESC
     `;
     
-    const quests = await db.all(query, params.length > 0 ? params : undefined);
+    const quests = await db.all(query);
     
     res.json(quests);
   } catch (error) {

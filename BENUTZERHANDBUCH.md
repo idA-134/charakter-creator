@@ -1,5 +1,7 @@
 # Charakter Creation System - Benutzerhandbuch
 
+Das nachfolgende Dokument wurde von Mario Schamp geschrieben. Es ist zum Zwecke der Gamification Nutzung innerhalb des LernLab IT zu verwenden und darf nicht reproduziert werden.
+
 ## Inhaltsverzeichnis
 1. [Überblick](#überblick)
 2. [Für Nachwuchskräfte (NWK)](#für-nachwuchskräfte)
@@ -32,6 +34,7 @@ Das Charakter Creation System ist ein gamifiziertes Lernmanagementsystem, das Na
 - **Name**: Der Name Ihres Charakters (z.B. "Code Master", "Network Ninja")
 - **Persönliche Geschichte (optional)**: Beschreiben Sie Ihren Charakter (max. 1000 Zeichen)
 - **Initiale Skills**: Verteilen Sie Punkte auf Ihre Fähigkeiten (0-20 pro Skill)
+- **Lehrgang**: Wählen Sie Ihre Gruppe (vom Dozenten/Admin vorab angelegt)
 
 **Schritt 3:** Klicken Sie "Character erstellen"
 
@@ -48,6 +51,7 @@ Das Charakter Creation System ist ein gamifiziertes Lernmanagementsystem, das Na
    - **Filter zurücksetzen**: Button um alle Filter zu löschen
 
 3. **Verfügbare Quests starten**: Klicken Sie "Quest starten" auf einer verfügbaren Quest
+4. **Details anzeigen**: Klicken Sie auf den Quest-Titel, um Details im Popup zu sehen
 
 **⚠️ Wichtig**: 
 - Überprüfen Sie das **Mindestlevel** der Quest
@@ -183,8 +187,10 @@ Diese sind nur Vorschläge - Sie können beliebig anpassen!
 ### 3. Quests verwalten
 
 **Quests anzeigen:**
-- "Quests verwalten" zeigt alle Ihre erstellten Quests
+- "Quests verwalten" zeigt alle erstellten Quests (für Dozenten und Admins)
 - Sehen Sie: Anzahl Zuweisungen, Anzahl Abgaben
+- Der Ersteller ist auf einen Blick sichtbar
+- Klicken Sie auf den Quest-Titel, um die Details zu sehen
 
 **Quest bearbeiten:**
 - Klicken Sie auf die Quest
@@ -201,7 +207,12 @@ Sie können Quests auf drei Wegen zuweisen:
 
 1. **An Nachwuchskraft**: Einzelne Person
 2. **An Gruppe**: Alle Mitglieder der Gruppe
-3. **An Admin**: Admin weist später zu
+3. **An Admins-Gruppe**: Admins prüfen die Quest und geben sie frei
+
+**Freigabe-Workflow (Pflicht):**
+1. Dozent teilt die Quest an die Gruppe **Admins**
+2. Ein Admin prüft und gibt die Quest frei
+3. Erst danach kann die Quest an andere Gruppen oder Einzelpersonen verteilt werden
 
 ### 4. Abgaben bewerten
 
@@ -294,12 +305,19 @@ Zugriff: "Admin-Panel" in der Navigation
 - Sehen Sie alle Benutzer
 - Genehmigen Sie ausstehende Dozenten-Anfragen
 - Löschen Sie Benutzer (⚠️ nicht reversibel)
+- Rollen und Adminrechte ändern (nur wenn Rolle "Admin" und Admin-Status "Ja")
 
 ### 3. Alle Quests sehen
 
-- Im Gegensatz zu Dozenten sehen Admins ALLE Quests
+- Admins sehen ALLE Quests
 - Sie können alle Quests bearbeiten und löschen
 - Sie können Abgaben von allen Quests bewerten
+- Quests lassen sich im Admin-Panel in der Prüfung öffnen und prüfen
+
+### 4. Rollen und Rechte (Wichtig)
+
+- **Voller Admin**: Rolle "Admin" **und** Admin-Status "Ja"
+- **Dozent mit Admin-Status "Ja"**: Darf Quests prüfen, aber **keine** Rollen/Adminrechte vergeben
 
 ### 4. System-Überwachung
 
@@ -398,14 +416,5 @@ Dies wird mit dem Mindestlevel skaliert.
 - Abgabefrist ignorieren
 - Unvollständige Aufgaben abgeben
 - Mindestlevel-Anforderungen ignorieren
-
----
-
-## Support
-
-Bei Fragen oder Problemen:
-1. Überprüfen Sie dieses Handbuch
-2. Kontaktieren Sie einen Admin
-3. Schauen Sie in die FAQ
 
 **Viel Erfolg beim Lernen und Unterrichten!** 🎮📚

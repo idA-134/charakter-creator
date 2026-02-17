@@ -9,6 +9,26 @@ const requireDozent = (req: any, res: any, next: any) => {
   next();
 };
 
+// Öffentliche Gruppenliste (z.B. für Lehrgang-Auswahl bei Character-Erstellung)
+groupRouter.get('/public', async (req, res) => {
+  try {
+    const groups = await db.all(`
+      SELECT g.*, u.username as created_by_username,
+             COUNT(gm.id) as member_count
+      FROM groups g
+      LEFT JOIN users u ON g.created_by_user_id = u.id
+      LEFT JOIN group_members gm ON g.id = gm.group_id
+      WHERE g.name <> 'Admins'
+      GROUP BY g.id, u.username
+      ORDER BY g.created_at DESC
+    `);
+    res.json(groups);
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Gruppen (public):', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
 // Alle Gruppen abrufen
 groupRouter.get('/', requireDozent, async (req, res) => {
   try {
