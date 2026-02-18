@@ -1,6 +1,6 @@
-import { db } from './db';
+import { db, pool } from './db';
 
-const cleanup = () => {
+const cleanup = async () => {
   try {
     console.log('🧹 Bereinige Datenbank...');
     
@@ -9,34 +9,45 @@ const cleanup = () => {
     
     // Löschen alles in Abhängigkeit von der Reihenfolge (Foreign Keys beachten)
     console.log('Lösche character-related Daten...');
-    db.exec(`DELETE FROM character_titles`);
-    db.exec(`DELETE FROM character_achievements`);
-    db.exec(`DELETE FROM character_equipment`);
-    db.exec(`DELETE FROM character_quests`);
-    db.exec(`DELETE FROM characters`);
+    await db.run(`DELETE FROM character_titles`);
+    await db.run(`DELETE FROM character_achievements`);
+    await db.run(`DELETE FROM character_equipment`);
+    await db.run(`DELETE FROM character_quests`);
+    await db.run(`DELETE FROM characters`);
     
     console.log('Lösche quest-related Daten...');
-    db.exec(`DELETE FROM quest_assignments`);
-    db.exec(`DELETE FROM quests`);
+    await db.run(`DELETE FROM quest_assignments`);
+    await db.run(`DELETE FROM quests`);
     
     console.log('Lösche group-related Daten...');
-    db.exec(`DELETE FROM group_members`);
-    db.exec(`DELETE FROM groups`);
+    await db.run(`DELETE FROM group_members`);
+    await db.run(`DELETE FROM groups`);
     
     console.log('Lösche Equipment...');
-    db.exec(`DELETE FROM equipment`);
+    await db.run(`DELETE FROM equipment`);
     
     console.log('Lösche Achievements...');
-    db.exec(`DELETE FROM achievements`);
+    await db.run(`DELETE FROM achievements`);
     
     console.log('Lösche Notifications...');
-    db.exec(`DELETE FROM notifications`);
+    await db.run(`DELETE FROM notifications`);
     
     console.log('Lösche alle Users außer Super Admin...');
-    db.exec(`DELETE FROM users WHERE id != ${superAdminId}`);
+    await db.run(`DELETE FROM users WHERE id != $1`, [superAdminId]);
+    
+    console.log('Setze Auto-Increment Sequences zurück...');
+    // Setze alle Sequences so, dass der nächste ID-Wert 2 ist (nach dem Super Admin mit ID 1)
+    await db.run(`SELECT setval('users_id_seq', 2, false)`);
+    await db.run(`SELECT setval('characters_id_seq', 1, false)`);
+    await db.run(`SELECT setval('quests_id_seq', 1, false)`);
+    await db.run(`SELECT setval('groups_id_seq', 1, false)`);
+    await db.run(`SELECT setval('equipment_id_seq', 1, false)`);
+    await db.run(`SELECT setval('achievements_id_seq', 1, false)`);
+    await db.run(`SELECT setval('notifications_id_seq', 1, false)`);
     
     console.log('\n✅ Datenbank erfolgreich bereinigt!');
     console.log(`✅ Super Admin (ID: ${superAdminId}) bleibt erhalten`);
+    console.log(`✅ Nächster User startet mit ID: 2`);
     
   } catch (error) {
     console.error('❌ Fehler beim Bereinigen:', error);
@@ -46,14 +57,16 @@ const cleanup = () => {
 
 // Script ausführen
 if (require.main === module) {
-  try {
-    cleanup();
-    console.log('Cleanup abgeschlossen');
-    process.exit(0);
-  } catch (error) {
-    console.error('Cleanup fehlgeschlagen:', error);
-    process.exit(1);
-  }
+  cleanup()
+    .then(() => {
+      console.log('Cleanup abgeschlossen');
+      return pool.end();
+    })
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Cleanup fehlgeschlagen:', error);
+      pool.end().finally(() => process.exit(1));
+    });
 }
 
 export { cleanup };

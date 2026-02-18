@@ -3,12 +3,15 @@ import { useParams, Link } from 'react-router-dom';
 import { questAPI, characterAPI, api } from '../services/api'; 
 import { Quest, Character } from '../types';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function Quests() {
   const { characterId } = useParams<{ characterId: string }>();
   const [quests, setQuests] = useState<Quest[]>([]);
   const [character, setCharacter] = useState<Character | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null);
 
   useEffect(() => {
     loadData();
@@ -50,7 +53,8 @@ export default function Quests() {
     if (filter === 'available') return quest.status === 'available';
     if (filter === 'in_progress') return quest.status === 'in_progress';
     if (filter === 'completed') return quest.status === 'completed';
-    return quest.category === filter;
+    // Vergleiche case-insensitive und auch mit großem Anfangsbuchstaben
+    return quest.category?.toLowerCase() === filter.toLowerCase();
   });
 
   if (loading) {
@@ -72,32 +76,56 @@ export default function Quests() {
 
       {/* Filter */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-        <div className="flex flex-wrap gap-2">
-          <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
-            Alle
-          </FilterButton>
-          <FilterButton active={filter === 'available'} onClick={() => setFilter('available')}>
-            Verfügbar
-          </FilterButton>
-          <FilterButton active={filter === 'in_progress'} onClick={() => setFilter('in_progress')}>
-            In Bearbeitung
-          </FilterButton>
-          <FilterButton active={filter === 'completed'} onClick={() => setFilter('completed')}>
-            Abgeschlossen
-          </FilterButton>
-          <div className="border-l mx-2"></div>
-          <FilterButton active={filter === 'programmierung'} onClick={() => setFilter('programmierung')}>
-            💻 Programmierung
-          </FilterButton>
-          <FilterButton active={filter === 'netzwerke'} onClick={() => setFilter('netzwerke')}>
-            🌐 Netzwerke
-          </FilterButton>
-          <FilterButton active={filter === 'datenbanken'} onClick={() => setFilter('datenbanken')}>
-            🗄️ Datenbanken
-          </FilterButton>
-          <FilterButton active={filter === 'sicherheit'} onClick={() => setFilter('sicherheit')}>
-            🔒 Sicherheit
-          </FilterButton>
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Status Filter Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+              Alle
+            </FilterButton>
+            <FilterButton active={filter === 'available'} onClick={() => setFilter('available')}>
+              Verfügbar
+            </FilterButton>
+            <FilterButton active={filter === 'in_progress'} onClick={() => setFilter('in_progress')}>
+              In Bearbeitung
+            </FilterButton>
+            <FilterButton active={filter === 'completed'} onClick={() => setFilter('completed')}>
+              Abgeschlossen
+            </FilterButton>
+          </div>
+
+          <div className="border-l h-8"></div>
+
+          {/* Kategorie Dropdown */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Kategorie:</label>
+            <select
+              value={['programmierung', 'netzwerke', 'datenbanken', 'hardware', 'sicherheit', 'projektmanagement'].includes(filter) ? filter : ''}
+              onChange={(e) => setFilter(e.target.value || 'all')}
+              className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                ['programmierung', 'netzwerke', 'datenbanken', 'hardware', 'sicherheit', 'projektmanagement'].includes(filter)
+                  ? 'border-primary-600 bg-primary-50 text-primary-700'
+                  : 'border-gray-300 bg-white text-gray-700'
+              }`}
+            >
+              <option value="">-- Alle Kategorien --</option>
+              <option value="programmierung">💻 Programmierung</option>
+              <option value="netzwerke">🌐 Netzwerke</option>
+              <option value="datenbanken">🗄️ Datenbanken</option>
+              <option value="sicherheit">🔒 Sicherheit</option>
+              <option value="hardware">⚙️ Hardware</option>
+              <option value="projektmanagement">📊 Projektmanagement</option>
+            </select>
+          </div>
+
+          {/* Filter zurücksetzen Button */}
+          {filter !== 'all' && (
+            <button
+              onClick={() => setFilter('all')}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              ✕ Filter zurücksetzen
+            </button>
+          )}
         </div>
       </div>
 
@@ -109,6 +137,7 @@ export default function Quests() {
             quest={quest}
             onStart={handleStartQuest}
             onReload={loadData}
+            onViewDetails={setSelectedQuest}
           />
         ))}
       </div>
@@ -117,6 +146,76 @@ export default function Quests() {
         <div className="text-center py-12 bg-white rounded-lg shadow-md">
           <div className="text-6xl mb-4">🔍</div>
           <p className="text-gray-600">Keine Quests gefunden</p>
+        </div>
+      )}
+
+      {selectedQuest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">{selectedQuest.title}</h2>
+              <button
+                onClick={() => setSelectedQuest(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Schliessen
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Beschreibung</h3>
+                <p className="text-gray-900 mt-1 whitespace-pre-wrap">{selectedQuest.description}</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Kategorie</h4>
+                  <p className="text-gray-900">{selectedQuest.category || '-'}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Schwierigkeit</h4>
+                  <p className="text-gray-900 capitalize">{selectedQuest.difficulty}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Min. Level</h4>
+                  <p className="text-gray-900">{selectedQuest.min_level}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">XP</h4>
+                  <p className="text-gray-900">{selectedQuest.xp_reward}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Erstellt von</h4>
+                  <p className="text-gray-900">{selectedQuest.created_by_username || 'Unbekannt'}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700">Attribut-Belohnungen</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 text-gray-900 text-sm">
+                  <div>Programmierung: {selectedQuest.programmierung_reward || 0}</div>
+                  <div>Netzwerke: {selectedQuest.netzwerke_reward || 0}</div>
+                  <div>Datenbanken: {selectedQuest.datenbanken_reward || 0}</div>
+                  <div>Hardware: {selectedQuest.hardware_reward || 0}</div>
+                  <div>Sicherheit: {selectedQuest.sicherheit_reward || 0}</div>
+                  <div>Projektmanagement: {selectedQuest.projektmanagement_reward || 0}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setSelectedQuest(null)}
+                className="flex-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300"
+              >
+                Schliessen
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -138,11 +237,13 @@ function FilterButton({ active, onClick, children }: any) {
   );
 }
 
-function QuestCard({ quest, onStart, onReload }: any) {
+function QuestCard({ quest, onStart, onReload, onViewDetails }: any) {
   const { characterId } = useParams<{ characterId: string }>();
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [submissionText, setSubmissionText] = useState('');
   const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [resources, setResources] = useState<any[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(true);
   
   const difficultyColors = {
     easy: 'bg-green-100 text-green-800',
@@ -161,6 +262,10 @@ function QuestCard({ quest, onStart, onReload }: any) {
     completed: 'bg-green-100 text-green-800',
     failed: 'bg-red-100 text-red-800',
   };
+
+  useEffect(() => {
+    loadResources();
+  }, [quest.id]);
   
   const calculateNextRepeatDate = (): Date | null => {
     if (!quest.is_repeatable || !quest.repeat_interval || !quest.repeat_time) {
@@ -273,6 +378,17 @@ function QuestCard({ quest, onStart, onReload }: any) {
       alert(errorMsg);
     }
   };
+
+  const loadResources = async () => {
+    try {
+      const res = await api.get(`/quests/${quest.id}/resources`);
+      setResources(res.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Ressourcen:', error);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
   
   const getStatusText = () => {
     if (quest.status === 'in_progress') return 'In Bearbeitung';
@@ -293,7 +409,19 @@ function QuestCard({ quest, onStart, onReload }: any) {
       )}
       
       <div className="flex justify-between items-start mb-4">
-        <h3 className="text-xl font-bold text-gray-900">{quest.title}</h3>
+        <div>
+          <button
+            onClick={() => onViewDetails(quest)}
+            className="text-left"
+          >
+            <h3 className="text-xl font-bold text-gray-900 hover:text-primary-700">
+              {quest.title}
+            </h3>
+          </button>
+          <p className="text-xs text-gray-500 mt-1">
+            Erstellt von: {quest.created_by_username || 'Unbekannt'}
+          </p>
+        </div>
         <div className="flex gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${difficultyColors[quest.difficulty as keyof typeof difficultyColors]}`}>
             {quest.difficulty}
@@ -305,6 +433,51 @@ function QuestCard({ quest, onStart, onReload }: any) {
       </div>
 
       <p className="text-gray-600 mb-4">{quest.description}</p>
+
+      <div className="mb-4">
+        <h4 className="text-sm font-semibold text-gray-700 mb-2">📁 Ressourcen:</h4>
+        {resourcesLoading ? (
+          <p className="text-sm text-gray-500">Lade Ressourcen...</p>
+        ) : resources.length === 0 ? (
+          <p className="text-sm text-gray-500">Keine Ressourcen vorhanden</p>
+        ) : (
+          <div className="space-y-3">
+            {resources.map((res) => (
+              <div key={res.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {res.mime_type?.startsWith('video/') ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">🎬 {res.original_name}</p>
+                    <video
+                      controls
+                      className="w-full max-h-64 rounded"
+                      src={`${API_BASE_URL}/${res.file_url}`}
+                    />
+                    <a
+                      href={`${API_BASE_URL}/${res.file_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      Datei herunterladen
+                    </a>
+                  </div>
+                ) : (
+                  <a
+                    href={`${API_BASE_URL}/${res.file_url}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="text-blue-600 hover:underline text-sm"
+                  >
+                    📥 {res.original_name}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="border-t pt-4 mb-4">
         <div className="text-sm font-bold text-gray-700 mb-2">🎁 Belohnungen:</div>

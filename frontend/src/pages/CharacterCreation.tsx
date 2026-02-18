@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { characterAPI } from '../services/api';
+import { characterAPI, groupAPI } from '../services/api';
+import { Group } from '../types';
 
 interface Props {
   user: any;
@@ -10,10 +11,16 @@ export default function CharacterCreation({ user }: Props) {
   const [name, setName] = useState('');
   const [backstory, setBackstory] = useState('');
   const [error, setError] = useState('');
+  const [userCharacters, setUserCharacters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupId, setGroupId] = useState('');
   const navigate = useNavigate();
 
   const MAX_POINTS = 60;
   const MAX_PER_ATTRIBUTE = 20;
+  const MAX_CHARACTERS = 1;
 
   const [attributes, setAttributes] = useState({
     programmierung: 0,
@@ -23,6 +30,37 @@ export default function CharacterCreation({ user }: Props) {
     sicherheit: 0,
     projektmanagement: 0
   });
+
+  useEffect(() => {
+    checkUserCharacters();
+    loadGroups();
+  }, []);
+
+  const checkUserCharacters = async () => {
+    try {
+      const response = await characterAPI.getByUser(user.id);
+      setUserCharacters(response.data);
+      if (response.data.length >= MAX_CHARACTERS) {
+        setError(`Du kannst maximal ${MAX_CHARACTERS} Charakter erstellen. Du hast bereits das Limit erreicht.`);
+      }
+    } catch (err) {
+      console.error('Fehler beim Überprüfen der Charaktere:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const response = await groupAPI.getPublic();
+      setGroups(response.data);
+    } catch (err) {
+      console.error('Fehler beim Laden der Gruppen:', err);
+      setError('Gruppen konnten nicht geladen werden');
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
 
   const totalPoints = Object.values(attributes).reduce((sum, val) => sum + val, 0);
   const remainingPoints = MAX_POINTS - totalPoints;
@@ -47,6 +85,11 @@ export default function CharacterCreation({ user }: Props) {
     e.preventDefault();
     setError('');
 
+    if (userCharacters.length >= MAX_CHARACTERS) {
+      setError(`Du kannst maximal ${MAX_CHARACTERS} Charakter erstellen.`);
+      return;
+    }
+
     if (name.length < 3) {
       setError('Name muss mindestens 3 Zeichen lang sein');
       return;
@@ -57,11 +100,17 @@ export default function CharacterCreation({ user }: Props) {
       return;
     }
 
+    if (!groupId) {
+      setError('Bitte wähle einen Lehrgang aus');
+      return;
+    }
+
     try {
       const response = await characterAPI.create({
         user_id: user.id,
         name,
         backstory: backstory.trim() || undefined,
+        group_id: Number(groupId),
         programmierung: attributes.programmierung,
         netzwerke: attributes.netzwerke,
         datenbanken: attributes.datenbanken,
@@ -82,36 +131,53 @@ export default function CharacterCreation({ user }: Props) {
           Neuen Charakter erstellen
         </h1>
 
-        <div className="mb-8 p-6 bg-primary-50 rounded-lg">
-          <h2 className="text-xl font-bold text-gray-900 mb-3">
-            🎮 Willkommen beim Charakter-Creator!
-          </h2>
-          <p className="text-gray-700 mb-2">
-            Erstelle deinen eigenen IT-Charakter und entwickle deine Skills in:
-          </p>
-          <ul className="grid grid-cols-2 gap-2 mt-4">
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">💻</span> Programmierung
-            </li>
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">🌐</span> Netzwerke
-            </li>
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">🗄️</span> Datenbanken
-            </li>
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">🖥️</span> Hardware
-            </li>
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">🔒</span> Sicherheit
-            </li>
-            <li className="flex items-center text-gray-700">
-              <span className="mr-2">📊</span> Projektmanagement
-            </li>
-          </ul>
-        </div>
+        {userCharacters.length >= MAX_CHARACTERS ? (
+          <div className="mb-8 p-6 bg-red-50 border border-red-200 rounded-lg">
+            <h2 className="text-xl font-bold text-red-900 mb-3">
+              ❌ Character-Limit erreicht
+            </h2>
+            <p className="text-red-800 mb-4">
+              Du kannst maximal {MAX_CHARACTERS} Charakter erstellen. Du hast bereits das Limit erreicht.
+            </p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            >
+              Zurück zum Dashboard
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-8 p-6 bg-primary-50 rounded-lg">
+              <h2 className="text-xl font-bold text-gray-900 mb-3">
+                🎮 Willkommen beim Charakter-Creator!
+              </h2>
+              <p className="text-gray-700 mb-2">
+                Erstelle deinen eigenen IT-Charakter und entwickle deine Skills in:
+              </p>
+              <ul className="grid grid-cols-2 gap-2 mt-4">
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">💻</span> Programmierung
+                </li>
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">🌐</span> Netzwerke
+                </li>
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">🗄️</span> Datenbanken
+                </li>
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">🖥️</span> Hardware
+                </li>
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">🔒</span> Sicherheit
+                </li>
+                <li className="flex items-center text-gray-700">
+                  <span className="mr-2">📊</span> Projektmanagement
+                </li>
+              </ul>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Charakter Name
@@ -144,6 +210,31 @@ export default function CharacterCreation({ user }: Props) {
             />
             <p className="mt-2 text-sm text-gray-500">
               {backstory.length}/1000 Zeichen
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Lehrgang
+            </label>
+            <select
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              required
+              disabled={groupsLoading}
+            >
+              <option value="">
+                {groupsLoading ? 'Lade Lehrgaenge...' : 'Bitte Lehrgang auswählen'}
+              </option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-sm text-gray-500">
+              Wähle die Gruppe aus, in der du eingeteilt bist
             </p>
           </div>
 
@@ -231,6 +322,8 @@ export default function CharacterCreation({ user }: Props) {
             Durch Quests und Aufgaben kannst du XP sammeln, leveln und deine Skills verbessern!
           </p>
         </div>
+      </>
+    )}
       </div>
     </div>
   );

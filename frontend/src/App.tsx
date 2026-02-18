@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import CharacterCreation from './pages/CharacterCreation';
@@ -15,10 +15,13 @@ import SubmissionReview from './pages/SubmissionReview';
 import GroupManagement from './pages/GroupManagement';
 import Inventory from './pages/Inventory';
 import EquipmentManagement from './pages/EquipmentManagement';
+import Journal from './pages/Journal';
 import Navigation from './components/Navigation';
 
 function App() {
   const [user, setUser] = useState<any>(null);
+  const idleTimerRef = useRef<number | null>(null);
+  const IDLE_TIMEOUT_MS = 20 * 60 * 1000;
 
   useEffect(() => {
     // User aus localStorage laden beim Start
@@ -34,6 +37,49 @@ function App() {
       localStorage.setItem('user', JSON.stringify(userData));
     }
   };
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+      }
+      return;
+    }
+
+    const resetIdleTimer = () => {
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+      }
+      idleTimerRef.current = window.setTimeout(() => {
+        handleLogout();
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const handleBeforeUnload = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    };
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach((event) => window.addEventListener(event, resetIdleTimer));
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    resetIdleTimer();
+
+    return () => {
+      activityEvents.forEach((event) => window.removeEventListener(event, resetIdleTimer));
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current);
+      }
+    };
+  }, [user, handleLogout]);
 
   return (
     <Router>
@@ -99,6 +145,10 @@ function App() {
           <Route 
             path="/dozent/equipment" 
             element={user?.role === 'dozent' || user?.isAdmin ? <EquipmentManagement /> : <Navigate to="/dashboard" />} 
+          />
+          <Route 
+            path="/journal/:characterId" 
+            element={user ? <Journal /> : <Navigate to="/login" />} 
           />
           <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
         </Routes>

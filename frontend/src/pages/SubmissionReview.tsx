@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function SubmissionReview() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
@@ -14,21 +16,13 @@ export default function SubmissionReview() {
 
   const loadSubmissions = async () => {
     try {
-      console.log('Loading submissions for user:', user.id);
-      const questsRes = await api.get(`/dozent/quests/my/${user.id}`);
-      console.log('Dozent quests:', questsRes.data);
+      console.log('Loading all submissions for user:', user.id);
+      // Lade ALLE Abgaben, nicht nur von den Quests des aktuellen Dozenten
+      const allSubRes = await api.get('/dozent/submissions/all');
+      console.log('All submissions:', allSubRes.data);
       
-      const allSubmissions = [];
-      
-      for (const quest of questsRes.data) {
-        console.log(`Loading submissions for quest ${quest.id}:`, quest.title);
-        const subRes = await api.get(`/dozent/quests/${quest.id}/submissions`);
-        console.log(`Submissions for quest ${quest.id}:`, subRes.data);
-        allSubmissions.push(...subRes.data.map((s: any) => ({ ...s, quest_title: quest.title })));
-      }
-      
-      console.log('All submissions:', allSubmissions);
-      const ungraded = allSubmissions.filter(s => !s.grade);
+      // Filtere ungradierten Abgaben (nur submitted, nicht yet graded)
+      const ungraded = allSubRes.data.filter((s: any) => s.submitted_at && !s.graded_at);
       console.log('Ungraded submissions:', ungraded);
       setSubmissions(ungraded);
     } catch (error) {
@@ -82,9 +76,21 @@ export default function SubmissionReview() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {submissions.map((sub) => (
-                <tr key={sub.id}>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{sub.quest_title}</td>
+              {submissions.map((sub) => {
+                // Prüfe ob dieser Dozent die Quest erstellt hat
+                const isMyQuest = sub.quest_creator_id === user.id;
+                const rowClass = isMyQuest ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50';
+                
+                return (
+                <tr key={sub.id} className={rowClass}>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-2">
+                      {isMyQuest && (
+                        <span className="inline-block w-3 h-3 bg-blue-500 rounded-full" title="Meine Quest"></span>
+                      )}
+                      {sub.quest_title}
+                    </div>
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{sub.character_name} (Lv. {sub.level})</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{sub.username}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">
@@ -99,7 +105,8 @@ export default function SubmissionReview() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           
@@ -134,12 +141,13 @@ export default function SubmissionReview() {
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Datei:</p>
                   <a
-                    href={selectedSubmission.submission_file_url}
+                    href={`${API_BASE_URL}/${selectedSubmission.submission_file_url}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    download
                     className="text-blue-600 hover:underline"
                   >
-                    {selectedSubmission.submission_file_url}
+                    📥 Datei herunterladen ({selectedSubmission.submission_file_url.split('/').pop()})
                   </a>
                 </div>
               )}

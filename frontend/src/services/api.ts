@@ -4,9 +4,17 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+});
+
+// Request interceptor to add token to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
 });
 
 // Character API
@@ -17,6 +25,7 @@ export const characterAPI = {
     user_id: number;
     name: string;
     backstory?: string;
+    group_id?: number;
     programmierung?: number;
     netzwerke?: number;
     datenbanken?: number;
@@ -32,6 +41,12 @@ export const characterAPI = {
   toggleEquipment: (characterId: number, equipmentId: number) => 
     api.post(`/characters/${characterId}/equipment/${equipmentId}/toggle`),
   delete: (id: number) => api.delete(`/characters/${id}`),
+};
+
+// Group API
+export const groupAPI = {
+  getPublic: () => api.get('/groups/public'),
+  getAll: () => api.get('/groups')
 };
 
 // Quest API
@@ -69,4 +84,17 @@ export const authAPI = {
   login: (data: { username: string; password: string }) => 
     api.post('/auth/login', data),
   getUser: (userId: number) => api.get(`/auth/me/${userId}`),
+};
+
+// Journal API
+export const journalAPI = {
+  getByCharacter: (characterId: number) => api.get(`/journal/character/${characterId}`),
+  create: (characterId: number, data: { entry_text: string; quest_id?: number; mood?: string }) => 
+    api.post(`/journal/character/${characterId}`, data),
+  update: (entryId: number, data: { entry_text: string; mood?: string }) => 
+    api.put(`/journal/${entryId}`, data),
+  delete: (entryId: number) => api.delete(`/journal/${entryId}`),
+  getQuestLog: (characterId: number) => api.get(`/journal/questlog/${characterId}`),
+  addReflection: (logId: number, reflection: string) => 
+    api.put(`/journal/questlog/${logId}/reflection`, { reflection }),
 };

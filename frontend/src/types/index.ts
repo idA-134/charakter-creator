@@ -74,6 +74,7 @@ export interface Quest {
   min_level: number;
   prerequisite_quest_id?: number;
   created_by_user_id?: number;
+  created_by_username?: string;
   
   status?: 'available' | 'in_progress' | 'submitted' | 'completed';
   started_at?: string;
@@ -92,6 +93,44 @@ export interface Quest {
   repeat_day_of_month?: number;
   due_date?: string;
   xp_scaling?: 'fixed' | 'scaled';
+  resources?: QuestResource[];
+}
+
+export interface QuestResource {
+  id: number;
+  quest_id: number;
+  file_url: string;
+  original_name: string;
+  mime_type?: string | null;
+  size?: number | null;
+  uploaded_at?: string | null;
+}
+
+export interface JournalEntry {
+  id: number;
+  character_id: number;
+  entry_text: string;
+  entry_date: string;
+  quest_id?: number;
+  quest_title?: string;
+  quest_category?: string;
+  mood?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestLog {
+  id: number;
+  character_id: number;
+  quest_id: number;
+  quest_title: string;
+  quest_description?: string;
+  completed_at: string;
+  xp_earned: number;
+  grade?: string;
+  feedback?: string;
+  reflection?: string;
+  created_at: string;
 }
 
 export interface User {

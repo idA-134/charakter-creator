@@ -37,3 +37,25 @@ coverage/
 # Backups
 *.backup
 backup-*
+
+# Uploads / user-generated content (nie committen)
+uploads/
+backend/uploads/
+
+# Laufzeit-Logs
+logs/
+frontend/logs/
+
+# Lokale Test-/DB-Artefakte
+backend/database/*.sqlite
+backend/database/*.sqlite-*
+backend/database/*.db
+
+# Weitere lokale Artefakte
+*.bak
+*.dump
+
+# Generated PDFs
+*.pdf
+# Installationspaket (lokal nur)
+installationspaket/

@@ -1,11 +1,22 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api } from '../services/api';
 
 export default function AdminPanel() {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isFullAdmin = (currentUser.role === 'admin' && currentUser.isAdmin) || currentUser.isSuperAdmin;
+  const canReviewQuests = currentUser.isSuperAdmin || (currentUser.isAdmin && (currentUser.role === 'admin' || currentUser.role === 'dozent'));
+
   const [users, setUsers] = useState<any[]>([]);
   const [pendingDozenten, setPendingDozenten] = useState<any[]>([]);
+  const [pendingQuests, setPendingQuests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'quest-approvals'>(() => (
+    isFullAdmin ? 'all' : 'quest-approvals'
+  ));
+  const [selectedQuest, setSelectedQuest] = useState<any | null>(null);
+  const [changingPasswordUserId, setChangingPasswordUserId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -14,12 +25,24 @@ export default function AdminPanel() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [usersRes, pendingRes] = await Promise.all([
-        api.get('/admin/users'),
-        api.get('/admin/pending-dozenten')
-      ]);
-      setUsers(usersRes.data);
-      setPendingDozenten(pendingRes.data);
+      if (isFullAdmin) {
+        const [usersRes, pendingRes] = await Promise.all([
+          api.get(`/admin/users?admin_user_id=${currentUser.id}`),
+          api.get(`/admin/pending-dozenten?admin_user_id=${currentUser.id}`)
+        ]);
+        setUsers(usersRes.data);
+        setPendingDozenten(pendingRes.data);
+      } else {
+        setUsers([]);
+        setPendingDozenten([]);
+      }
+
+      if (canReviewQuests) {
+        const pendingQuestsRes = await api.get(`/admin/quests/pending-approval?admin_user_id=${currentUser.id}`);
+        setPendingQuests(pendingQuestsRes.data || []);
+      } else {
+        setPendingQuests([]);
+      }
     } catch (error) {
       console.error('Fehler beim Laden der Daten:', error);
     } finally {
@@ -27,9 +50,32 @@ export default function AdminPanel() {
     }
   };
 
+  const approveQuest = async (questId: number) => {
+    try {
+      await api.post(`/admin/quests/${questId}/approve`, { admin_user_id: currentUser.id });
+      loadData();
+    } catch (error: any) {
+      console.error('Fehler beim Freigeben der Quest:', error);
+      alert(error.response?.data?.error || 'Fehler beim Freigeben der Quest');
+    }
+  };
+
+  const rejectQuest = async (questId: number) => {
+    const reason = prompt('Bitte Begruendung fuer die Ablehnung eingeben:');
+    if (!reason) return;
+
+    try {
+      await api.post(`/admin/quests/${questId}/reject`, { admin_user_id: currentUser.id, reason });
+      loadData();
+    } catch (error: any) {
+      console.error('Fehler beim Ablehnen der Quest:', error);
+      alert(error.response?.data?.error || 'Fehler beim Ablehnen der Quest');
+    }
+  };
+
   const changeRole = async (userId: number, role: string) => {
     try {
-      await api.put(`/admin/users/${userId}/role`, { role });
+      await api.put(`/admin/users/${userId}/role`, { role, admin_user_id: currentUser.id });
       loadData();
     } catch (error) {
       console.error('Fehler beim Ändern der Rolle:', error);
@@ -39,7 +85,7 @@ export default function AdminPanel() {
 
   const toggleAdmin = async (userId: number, isAdmin: boolean) => {
     try {
-      await api.put(`/admin/users/${userId}/admin`, { is_admin: !isAdmin });
+      await api.put(`/admin/users/${userId}/admin`, { is_admin: !isAdmin, admin_user_id: currentUser.id });
       loadData();
     } catch (error: any) {
       console.error('Fehler beim Ändern des Admin-Status:', error);
@@ -49,7 +95,7 @@ export default function AdminPanel() {
 
   const approveDozent = async (userId: number) => {
     try {
-      await api.post(`/admin/approve-dozent/${userId}`);
+      await api.post(`/admin/approve-dozent/${userId}`, { admin_user_id: currentUser.id });
       loadData();
     } catch (error: any) {
       console.error('Fehler beim Genehmigen:', error);
@@ -61,7 +107,7 @@ export default function AdminPanel() {
     if (!confirm('Dozent-Anfrage wirklich ablehnen und User löschen?')) return;
     
     try {
-      await api.post(`/admin/reject-dozent/${userId}`);
+      await api.post(`/admin/reject-dozent/${userId}`, { admin_user_id: currentUser.id });
       loadData();
     } catch (error: any) {
       console.error('Fehler beim Ablehnen:', error);
@@ -73,11 +119,40 @@ export default function AdminPanel() {
     if (!confirm('User wirklich löschen?')) return;
     
     try {
-      await api.delete(`/admin/users/${userId}`);
+      await api.delete(`/admin/users/${userId}`, { data: { admin_user_id: currentUser.id } });
       loadData();
     } catch (error: any) {
       console.error('Fehler beim Löschen des Users:', error);
       alert(error.response?.data?.error || 'Fehler beim Löschen des Users');
+    }
+  };
+
+  const changePassword = async (userId: number) => {
+    setPasswordError('');
+    
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError('Passwort muss mindestens 6 Zeichen lang sein');
+      return;
+    }
+
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.isSuperAdmin) {
+      alert('Nur Super-Admins können Passwörter ändern');
+      return;
+    }
+
+    try {
+      const response = await api.put(`/admin/users/${userId}/password`, {
+        newPassword,
+        adminUserId: user.id
+      });
+      
+      alert(`Passwort für ${response.data.username} erfolgreich geändert!`);
+      setChangingPasswordUserId(null);
+      setNewPassword('');
+    } catch (error: any) {
+      console.error('Fehler beim Ändern des Passworts:', error);
+      setPasswordError(error.response?.data?.error || 'Fehler beim Ändern des Passworts');
     }
   };
 
@@ -92,31 +167,52 @@ export default function AdminPanel() {
       {/* Tabs */}
       <div className="mb-6 border-b border-gray-200">
         <nav className="flex space-x-8">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'pending'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Ausstehende Dozenten
-            {pendingDozenten.length > 0 && (
-              <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-red-100 text-red-600">
-                {pendingDozenten.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'all'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Alle User
-          </button>
+          {isFullAdmin && (
+            <>
+              <button
+                onClick={() => setActiveTab('pending')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'pending'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Ausstehende Dozenten
+                {pendingDozenten.length > 0 && (
+                  <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-red-100 text-red-600">
+                    {pendingDozenten.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'all'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Alle User
+              </button>
+            </>
+          )}
+          {canReviewQuests && (
+            <button
+              onClick={() => setActiveTab('quest-approvals')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'quest-approvals'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Quest-Pruefung
+              {pendingQuests.length > 0 && (
+                <span className="ml-2 px-2 py-1 text-xs font-bold rounded-full bg-red-100 text-red-600">
+                  {pendingQuests.length}
+                </span>
+              )}
+            </button>
+          )}
         </nav>
       </div>
 
@@ -183,6 +279,167 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {activeTab === 'quest-approvals' && (
+        <div>
+          {pendingQuests.length === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-800">
+              Keine Quests zur Pruefung vorhanden
+            </div>
+          ) : (
+            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Titel
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Erstellt von
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Angefragt am
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Aktionen
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {pendingQuests.map((quest) => (
+                    <tr key={quest.id}>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        <button
+                          onClick={() => setSelectedQuest(quest)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          {quest.title}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {quest.created_by_username || 'Unbekannt'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {quest.approval_requested_at
+                          ? new Date(quest.approval_requested_at).toLocaleDateString('de-DE')
+                          : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium space-x-2">
+                        <button
+                          onClick={() => setSelectedQuest(quest)}
+                          className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                        >
+                          Details
+                        </button>
+                        <button
+                          onClick={() => approveQuest(quest.id)}
+                          className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                        >
+                          Freigeben
+                        </button>
+                        <button
+                          onClick={() => rejectQuest(quest.id)}
+                          className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                        >
+                          Ablehnen
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedQuest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">{selectedQuest.title}</h2>
+              <button
+                onClick={() => setSelectedQuest(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                Schliessen
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Beschreibung</h3>
+                <p className="text-gray-900 mt-1 whitespace-pre-wrap">{selectedQuest.description}</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Kategorie</h4>
+                  <p className="text-gray-900">{selectedQuest.category || '-'}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Schwierigkeit</h4>
+                  <p className="text-gray-900 capitalize">{selectedQuest.difficulty}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Min. Level</h4>
+                  <p className="text-gray-900">{selectedQuest.min_level}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">XP</h4>
+                  <p className="text-gray-900">{selectedQuest.xp_reward}</p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Erstellt von</h4>
+                  <p className="text-gray-900">{selectedQuest.created_by_username || 'Unbekannt'}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700">Attribut-Belohnungen</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 text-gray-900 text-sm">
+                  <div>Programmierung: {selectedQuest.programmierung_reward || 0}</div>
+                  <div>Netzwerke: {selectedQuest.netzwerke_reward || 0}</div>
+                  <div>Datenbanken: {selectedQuest.datenbanken_reward || 0}</div>
+                  <div>Hardware: {selectedQuest.hardware_reward || 0}</div>
+                  <div>Sicherheit: {selectedQuest.sicherheit_reward || 0}</div>
+                  <div>Projektmanagement: {selectedQuest.projektmanagement_reward || 0}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  approveQuest(selectedQuest.id);
+                  setSelectedQuest(null);
+                }}
+                className="flex-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+              >
+                Freigeben
+              </button>
+              <button
+                onClick={() => {
+                  rejectQuest(selectedQuest.id);
+                  setSelectedQuest(null);
+                }}
+                className="flex-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+              >
+                Ablehnen
+              </button>
+              <button
+                onClick={() => setSelectedQuest(null)}
+                className="flex-1 inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300"
+              >
+                Schliessen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Alle User Tab */}
       {activeTab === 'all' && (
         <div>
@@ -212,7 +469,8 @@ export default function AdminPanel() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.id}>
+                  <Fragment key={user.id}>
+                    <tr>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {user.id}
                     </td>
@@ -255,7 +513,19 @@ export default function AdminPanel() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(user.created_at).toLocaleDateString('de-DE')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      {currentUser.isSuperAdmin && user.is_super_admin !== 1 && (
+                        <button
+                          onClick={() => {
+                            setChangingPasswordUserId(user.id);
+                            setNewPassword('');
+                            setPasswordError('');
+                          }}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Passwort
+                        </button>
+                      )}
                       {user.is_super_admin !== 1 && (
                         <button
                           onClick={() => deleteUser(user.id)}
@@ -265,7 +535,49 @@ export default function AdminPanel() {
                         </button>
                       )}
                     </td>
-                  </tr>
+                    </tr>
+                    {changingPasswordUserId === user.id && (
+                      <tr>
+                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                        <div className="max-w-md">
+                          <h4 className="font-semibold text-gray-900 mb-3">
+                            Passwort ändern für: {user.username}
+                          </h4>
+                          <div className="space-y-3">
+                            <input
+                              type="password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Neues Passwort (min. 6 Zeichen)"
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                            />
+                            {passwordError && (
+                              <p className="text-red-600 text-sm">{passwordError}</p>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => changePassword(user.id)}
+                                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg"
+                              >
+                                Passwort ändern
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setChangingPasswordUserId(null);
+                                  setNewPassword('');
+                                  setPasswordError('');
+                                }}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg"
+                              >
+                                Abbrechen
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

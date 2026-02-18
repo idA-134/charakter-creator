@@ -1,14 +1,18 @@
-import { db } from './db';
+import { db, pool } from './db';
 
-const seedData = () => {
+const seedData = async () => {
   try {
     console.log('🌱 Beginne mit Seed-Daten...');
 
     // Beispiel-Ausrüstung (Programmierung)
-    const equipStmt = db.prepare(`
-      INSERT OR IGNORE INTO equipment (name, description, rarity)
-      VALUES (?, ?, ?)
-    `);
+    const insertEquipment = async (name: string, description: string, rarity: string) => {
+      await db.run(
+        `INSERT INTO equipment (name, description, rarity)
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
+        [name, description, rarity]
+      );
+    };
     
     const programmingEquipment = [
       ['ThinkPad X1', 'Zuverlässiger Business-Laptop', 'common'],
@@ -20,7 +24,7 @@ const seedData = () => {
     ];
 
     for (const item of programmingEquipment) {
-      equipStmt.run(...item);
+      await insertEquipment(item[0], item[1], item[2]);
     }
 
     // Netzwerk-Equipment
@@ -31,7 +35,7 @@ const seedData = () => {
     ];
 
     for (const item of networkEquipment) {
-      equipStmt.run(...item);
+      await insertEquipment(item[0], item[1], item[2]);
     }
 
     // Datenbank-Equipment
@@ -42,18 +46,30 @@ const seedData = () => {
     ];
 
     for (const item of dbEquipment) {
-      equipStmt.run(...item);
+      await insertEquipment(item[0], item[1], item[2]);
     }
 
     console.log('✅ Equipment erfolgreich angelegt!');
 
     // Beispiel-Achievements
-    const achievementStmt = db.prepare(`
-      INSERT OR IGNORE INTO achievements (name, description, icon, category, xp_reward, requirement_type, requirement_value)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    const insertAchievement = async (
+      name: string,
+      description: string,
+      icon: string,
+      category: string,
+      xp_reward: number,
+      requirement_type: string,
+      requirement_value: number
+    ) => {
+      await db.run(
+        `INSERT INTO achievements (name, description, icon, category, xp_reward, requirement_type, requirement_value)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT DO NOTHING`,
+        [name, description, icon, category, xp_reward, requirement_type, requirement_value]
+      );
+    };
 
-    const achievements = [
+    const achievements: Array<[string, string, string, string, number, string, number]> = [
       ['Erste Schritte', 'Erstelle deinen ersten Charakter', '🎯', 'special', 50, 'level', 1],
       ['Code Novize', 'Erreiche Programmierung Level 25', '💻', 'skill', 100, 'stat', 25],
       ['Netzwerk-Guru', 'Erreiche Netzwerke Level 50', '🌐', 'skill', 200, 'stat', 50],
@@ -64,17 +80,20 @@ const seedData = () => {
     ];
 
     for (const achievement of achievements) {
-      achievementStmt.run(...achievement);
+      await insertAchievement(
+        achievement[0],
+        achievement[1],
+        achievement[2],
+        achievement[3],
+        achievement[4],
+        achievement[5],
+        achievement[6]
+      );
     }
 
     console.log('✅ Achievements erfolgreich angelegt!');
 
     // Beispiel-Quests
-    const questStmt = db.prepare(`
-      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, programmierung_reward, min_level)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
     const programmingQuests = [
       ['Hello World', 'Schreibe dein erstes Programm in einer beliebigen Sprache', 'programmierung', 'beginner', 50, 5, 1],
       ['Variablen & Datentypen', 'Lerne die Grundlagen von Variablen und Datentypen', 'programmierung', 'beginner', 75, 8, 1],
@@ -85,14 +104,15 @@ const seedData = () => {
     ];
 
     for (const quest of programmingQuests) {
-      questStmt.run(...quest);
+      await db.run(
+        `INSERT INTO quests (title, description, category, difficulty, xp_reward, programmierung_reward, min_level)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT DO NOTHING`,
+        quest
+      );
     }
 
     // Netzwerk-Quests
-    const networkQuestStmt = db.prepare(`
-      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, netzwerke_reward, min_level)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
 
     const networkQuests = [
       ['OSI-Modell', 'Verstehe die 7 Schichten des OSI-Modells', 'netzwerke', 'beginner', 75, 8, 1],
@@ -101,14 +121,15 @@ const seedData = () => {
     ];
 
     for (const quest of networkQuests) {
-      networkQuestStmt.run(...quest);
+      await db.run(
+        `INSERT INTO quests (title, description, category, difficulty, xp_reward, netzwerke_reward, min_level)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT DO NOTHING`,
+        quest
+      );
     }
 
     // Datenbank-Quests
-    const dbQuestStmt = db.prepare(`
-      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, datenbanken_reward, min_level)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
 
     const dbQuests = [
       ['SQL Basics', 'Lerne SELECT, INSERT, UPDATE, DELETE', 'datenbanken', 'beginner', 100, 10, 1],
@@ -117,14 +138,15 @@ const seedData = () => {
     ];
 
     for (const quest of dbQuests) {
-      dbQuestStmt.run(...quest);
+      await db.run(
+        `INSERT INTO quests (title, description, category, difficulty, xp_reward, datenbanken_reward, min_level)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT DO NOTHING`,
+        quest
+      );
     }
 
     // Sicherheits-Quests
-    const securityQuestStmt = db.prepare(`
-      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, sicherheit_reward, min_level)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
 
     const securityQuests = [
       ['Passwort-Sicherheit', 'Lerne Best Practices für sichere Passwörter', 'sicherheit', 'beginner', 75, 8, 1],
@@ -133,21 +155,27 @@ const seedData = () => {
     ];
 
     for (const quest of securityQuests) {
-      securityQuestStmt.run(...quest);
+      await db.run(
+        `INSERT INTO quests (title, description, category, difficulty, xp_reward, sicherheit_reward, min_level)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT DO NOTHING`,
+        quest
+      );
     }
 
     // Wiederholbare Quests (z.B. wöchentliche Aufgaben)
-    const repeatableQuestStmt = db.prepare(`
-      INSERT OR IGNORE INTO quests (title, description, category, difficulty, xp_reward, min_level, is_repeatable, repeat_interval)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
 
     const repeatableQuests = [
       ['Berichtsheft', 'Fülle das wöchentliche Berichtsheft aus und dokumentiere deine Lernfortschritte', 'dokumentation', 'beginner', 500, 1, 1, 'weekly']
     ];
 
     for (const quest of repeatableQuests) {
-      repeatableQuestStmt.run(...quest);
+      await db.run(
+        `INSERT INTO quests (title, description, category, difficulty, xp_reward, min_level, is_repeatable, repeat_interval)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT DO NOTHING`,
+        quest
+      );
     }
 
     console.log('✅ Quests erfolgreich angelegt!');
@@ -160,14 +188,16 @@ const seedData = () => {
 
 // Script ausführen
 if (require.main === module) {
-  try {
-    seedData();
-    console.log('Seed abgeschlossen');
-    process.exit(0);
-  } catch (error) {
-    console.error('Seed fehlgeschlagen:', error);
-    process.exit(1);
-  }
+  seedData()
+    .then(() => {
+      console.log('Seed abgeschlossen');
+      return pool.end();
+    })
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error('Seed fehlgeschlagen:', error);
+      pool.end().finally(() => process.exit(1));
+    });
 }
 
 export { seedData };

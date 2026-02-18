@@ -13,7 +13,7 @@ Ein RPG-inspiriertes Gamification-System für Fachinformatiker Auszubildende. En
 
 ## 🛠️ Tech Stack
 
-**Backend:** Node.js, Express, TypeScript, SQLite  
+**Backend:** Node.js, Express, TypeScript, PostgreSQL  
 **Frontend:** React, TypeScript, Vite, Tailwind CSS
 
 ## � Installation

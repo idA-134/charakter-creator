@@ -94,6 +94,31 @@ export interface CharacterQuest {
   graded_by_user_id?: number;
 }
 
+export interface JournalEntry {
+  id: number;
+  character_id: number;
+  entry_text: string;
+  entry_date: Date;
+  quest_id?: number;
+  mood?: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface QuestLog {
+  id: number;
+  character_id: number;
+  quest_id: number;
+  quest_title: string;
+  quest_description?: string;
+  completed_at: Date;
+  xp_earned: number;
+  grade?: string;
+  feedback?: string;
+  reflection?: string;
+  created_at: Date;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -125,4 +150,15 @@ export interface QuestAssignment {
   user_id?: number;
   group_id?: number;
   assigned_at: Date;
+}
+
+export interface QuestResource {
+  id: number;
+  quest_id: number;
+  file_url: string;
+  original_name: string;
+  mime_type?: string;
+  size?: number;
+  uploaded_by_user_id?: number;
+  uploaded_at?: Date;
 }

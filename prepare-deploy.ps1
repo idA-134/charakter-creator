@@ -27,12 +27,6 @@ if (Test-Path "frontend\dist") { Remove-Item -Recurse -Force "frontend\dist" }
 if (Test-Path "frontend\build") { Remove-Item -Recurse -Force "frontend\build" }
 Print-Success "Build-Verzeichnisse geloescht"
 
-Print-Info "Loesche Datenbank-Dateien..."
-Get-ChildItem -Path "backend" -Filter "*.sqlite" -ErrorAction SilentlyContinue | Remove-Item -Force
-Get-ChildItem -Path "backend" -Filter "*.db" -ErrorAction SilentlyContinue | Remove-Item -Force
-if (Test-Path "backend\database.sqlite-journal") { Remove-Item -Force "backend\database.sqlite-journal" }
-Print-Success "Datenbank-Dateien geloescht"
-
 Print-Info "Loesche .env Dateien..."
 if (Test-Path "backend\.env") { Remove-Item -Force "backend\.env" }
 if (Test-Path "frontend\.env") { Remove-Item -Force "frontend\.env" }
